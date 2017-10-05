@@ -12,7 +12,7 @@
     </description>
 
     <author href="http://moodle.com" email="mobile@moodle.com">
-        Moodle Pty Ltd
+        Ingegno PVT Ltd
     </author>
 
     <gap:config-file platform="ios" parent="CFBundleShortVersionString">
