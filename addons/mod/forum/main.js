@@ -18,9 +18,6 @@ angular.module('mm.addons.mod_forum', [])
 .constant('mmaModForumComponent', 'mmaModForum')
 .constant('mmaModForumNewDiscussionEvent', 'mma-mod_forum_new_discussion')
 .constant('mmaModForumReplyDiscussionEvent', 'mma-mod_forum_reply_discussion')
-.constant('mmaModForumAutomSyncedEvent', 'mma-mod_forum_autom_synced')
-.constant('mmaModForumManualSyncedEvent', 'mma-mod_forum_manual_synced')
-.constant('mmaModForumSyncTime', 300000) // In milliseconds.
 
 .config(function($stateProvider) {
 
@@ -46,9 +43,7 @@ angular.module('mm.addons.mod_forum', [])
             discussionid: null,
             cid: null, // Not naming it courseid because it collides with 'site.mod_forum' param in split-view.
             forumid: null,
-            cmid: null,
-            trackposts: null, // Whether the discussion can track posts reading.
-            locked: null // Whether the discussion is locked for the user.
+            cmid: null
         },
         views: {
             'site': {
@@ -63,8 +58,7 @@ angular.module('mm.addons.mod_forum', [])
         params: {
             cid: null, // Not naming it courseid because it collides with 'site.mod_forum' param in split-view.
             forumid: null,
-            cmid: null,
-            timecreated: null
+            cmid: null
         },
         views: {
             'site': {
@@ -76,12 +70,7 @@ angular.module('mm.addons.mod_forum', [])
 
 })
 
-.config(function($mmCourseDelegateProvider, $mmContentLinksDelegateProvider, $mmCoursePrefetchDelegateProvider) {
+.config(function($mmCourseDelegateProvider, $mmContentLinksDelegateProvider) {
     $mmCourseDelegateProvider.registerContentHandler('mmaModForum', 'forum', '$mmaModForumHandlers.courseContent');
-    $mmCoursePrefetchDelegateProvider.registerPrefetchHandler('mmaModForum', 'forum', '$mmaModForumPrefetchHandler');
-    $mmContentLinksDelegateProvider.registerLinkHandler('mmaModForum:index', '$mmaModForumHandlers.indexLinksHandler');
-    $mmContentLinksDelegateProvider.registerLinkHandler('mmaModForum:discussion', '$mmaModForumHandlers.discussionLinksHandler');
-})
-.run(function($mmCronDelegate) {
-    $mmCronDelegate.register('mmaModForum', '$mmaModForumHandlers.syncHandler');
+    $mmContentLinksDelegateProvider.registerLinkHandler('mmaModForum', '$mmaModForumHandlers.linksHandler');
 });

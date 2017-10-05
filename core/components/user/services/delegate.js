@@ -22,7 +22,7 @@ angular.module('mm.core.user')
  * @ngdoc provider
  * @name $mmUserDelegate
  */
-.provider('$mmUserDelegate', function(mmUserProfileHandlersTypeNewPage) {
+.provider('$mmUserDelegate', function() {
     var profileHandlers = {},
         self = {};
 
@@ -42,15 +42,6 @@ angular.module('mm.core.user')
      *                             - getController(userid) (Function) Returns the function that will act as controller.
      *                                                                See core/components/user/templates/profile.html
      *                                                                for the list of scope variables expected.
-     *                           Also the object require the following attributes:
-     *                             - type (String)  A type should be specified among these:
-     *                                                 - mmUserProfileHandlersTypeCommunication: will be displayed under the user
-     *                                                         avatar. Should have icon. Spinner not used.
-     *                                                 - mmUserProfileHandlersTypeNewPage: will be displayed as a list of items.
-     *                                                         Should have icon. Spinner not used.
-     *                                                         Default value if none is specified.
-     *                                                 - mmUserProfileHandlersTypeAction: will be displayed as a button and should
-     *                                                         not redirect to any state. Spinner use is recommended.
      *                           The string can either be 'factoryName' or 'factoryName.functionToCall'.
      * @param {Number} [priority=100] Plugin priority.
      */
@@ -69,7 +60,7 @@ angular.module('mm.core.user')
         return true;
     };
 
-    self.$get = function($q, $log, $mmSite, $mmUtil, $mmCourses) {
+    self.$get = function($q, $log, $mmSite, $mmUtil) {
         var enabledProfileHandlers = {},
             self = {},
             lastUpdateHandlersStart;
@@ -84,47 +75,31 @@ angular.module('mm.core.user')
          * @name $mmUserDelegate#getProfileHandlersFor
          * @param {Object} user The user object.
          * @param {Number} courseId The course ID.
-         * @return {Promise} Resolved with an array of objects containing 'priority', 'controller' and 'type'.
+         * @return {Promise} Resolved with an array of objects containing 'priority' and 'controller'.
          */
         self.getProfileHandlersFor = function(user, courseId) {
             var handlers = [],
                 promises = [];
 
-            // Retrieve course options forcing cache.
-            return $mmCourses.getUserCourses(true).then(function(courses) {
-                var courseIds = courses.map(function(course) {
-                    return course.id;
-                });
-
-                return $mmCourses.getCoursesOptions(courseIds).then(function(options) {
-                    // For backwards compatibility we don't modify the courseId.
-                    var courseIdForOptions = courseId || $mmSite.getSiteHomeId();
-                    var navOptions = options.navOptions[courseIdForOptions];
-                    var admOptions = options.admOptions[courseIdForOptions];
-
-                    angular.forEach(enabledProfileHandlers, function(handler) {
-                        // Checks if the handler is enabled for the user.
-                        var isEnabledForUser = handler.instance.isEnabledForUser(user, courseId, navOptions, admOptions);
-                        var promise = $q.when(isEnabledForUser).then(function(enabled) {
-                            if (enabled) {
-                                handlers.push({
-                                    controller: handler.instance.getController(user, courseId),
-                                    priority: handler.priority,
-                                    type: handler.instance.type || mmUserProfileHandlersTypeNewPage
-                                });
-                            } else {
-                                return $q.reject();
-                            }
-                        }).catch(function() {
-                            // Nothing to do here, it is not enabled for this user.
+            angular.forEach(enabledProfileHandlers, function(handler) {
+                // Checks if the handler is enabled for the user.
+                var promise = $q.when(handler.instance.isEnabledForUser(user, courseId)).then(function(enabled) {
+                    if (enabled) {
+                        handlers.push({
+                            controller: handler.instance.getController(user, courseId),
+                            priority: handler.priority
                         });
-                        promises.push(promise);
-                    });
-
-                    return $q.all(promises).then(function() {
-                        return handlers;
-                    });
+                    } else {
+                        return $q.reject();
+                    }
+                }).catch(function() {
+                    // Nothing to do here, it is not enabled for this user.
                 });
+                promises.push(promise);
+            });
+
+            return $q.all(promises).then(function() {
+                return handlers;
             }).catch(function() {
                 // Never fails.
                 return handlers;
@@ -170,8 +145,6 @@ angular.module('mm.core.user')
 
             if (!$mmSite.isLoggedIn()) {
                 promise = $q.reject();
-            } else if ($mmSite.isFeatureDisabled('$mmUserDelegate_' + component)) {
-                promise = $q.when(false);
             } else {
                 promise = $q.when(handlerInfo.instance.isEnabled());
             }

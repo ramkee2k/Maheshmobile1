@@ -21,8 +21,7 @@ angular.module('mm.addons.mod_wiki')
  * @ngdoc service
  * @name $mmaModWiki
  */
-.factory('$mmaModWiki', function($q, $mmSite, $mmSitesManager, $mmFilepool, $mmApp, $mmaModWikiOffline, $mmUtil, $mmLang,
-            mmaModWikiComponent) {
+.factory('$mmaModWiki', function($q, $mmSite, $mmSitesManager, $mmFilepool, mmaModWikiComponent) {
     var self = {},
         subwikiListsCache = {};
 
@@ -111,6 +110,8 @@ angular.module('mm.addons.mod_wiki')
      * @return {Promise}         Promise resolved with true if plugin is enabled, rejected or resolved with false otherwise.
      */
     self.isPluginEnabled = function(siteId) {
+        siteId = siteId || $mmSite.getId();
+
         return $mmSitesManager.getSite(siteId).then(function(site) {
             return  site.wsAvailable('mod_wiki_get_wikis_by_courses') &&
                     site.wsAvailable('mod_wiki_get_subwikis') &&
@@ -146,6 +147,8 @@ angular.module('mm.addons.mod_wiki')
      * @return {Promise}        Promise resolved when the wiki is retrieved.
      */
     self.getWiki = function(courseId, id, paramName, siteId) {
+        siteId = siteId || $mmSite.getId();
+
         return $mmSitesManager.getSite(siteId).then(function(site) {
             var params = {
                     courseids: [courseId]
@@ -248,19 +251,15 @@ angular.module('mm.addons.mod_wiki')
      * @module mm.addons.mod_wiki
      * @ngdoc method
      * @name $mmaModWiki#setSubwikiList
-     * @param  {Number} wikiId      wiki Id
-     * @param  {Number} subwikis    List of subwikis
-     * @param  {Number} count       Number of subwikis in the subwikis list
-     * @param  {Number} subwikiId   subwiki Id currently selected
-     * @param  {Number} userId      user Id currently selected
-     * @param  {Number} groupId     group Id currently selected
+     * @param  {Number} wikiId wiki Id
+     * @param  {Number} subwikis List of subwikis
+     * @param  {Number} count Number of subwikis in the subwikis list
+     * @param  {Number} selected subwiki Id currently selected
      */
-    self.setSubwikiList = function(wikiId, subwikis, count, subwikiId, userId, groupId) {
+    self.setSubwikiList = function(wikiId, subwikis, count, selected) {
         var subwikiLists =  {
             count: count,
-            subwikiSelected: subwikiId,
-            userSelected: userId,
-            groupSelected: groupId,
+            selected: selected,
             subwikis: subwikis
         };
         subwikiListsCache[wikiId] = subwikiLists;
@@ -294,6 +293,8 @@ angular.module('mm.addons.mod_wiki')
      * @return {Promise}        Promise resolved with wiki subwikis.
      */
     self.getSubwikis = function(wikiId, siteId) {
+        siteId = siteId || $mmSite.getId();
+
         return $mmSitesManager.getSite(siteId).then(function(site) {
             var params = {
                     wikiid: wikiId
@@ -327,6 +328,8 @@ angular.module('mm.addons.mod_wiki')
      * @return {Promise}        Promise resolved with wiki subwiki pages.
      */
     self.getSubwikiPages = function(wikiId, groupId, userId, sortBy, sortDirection, includeContent, siteId) {
+        siteId = siteId || $mmSite.getId();
+
         return $mmSitesManager.getSite(siteId).then(function(site) {
             groupId = groupId || -1;
             userId = userId || 0;
@@ -370,6 +373,8 @@ angular.module('mm.addons.mod_wiki')
      * @return {Promise}        Promise resolved with wiki subwiki files.
      */
     self.getSubwikiFiles = function(wikiId, groupId, userId, siteId) {
+        siteId = siteId || $mmSite.getId();
+
         return $mmSitesManager.getSite(siteId).then(function(site) {
             groupId = groupId || -1;
             userId = userId || 0;
@@ -402,6 +407,8 @@ angular.module('mm.addons.mod_wiki')
      * @return {Promise}        Promise resolved with wiki page contents.
      */
     self.getPageContents = function(pageId, siteId) {
+        siteId = siteId || $mmSite.getId();
+
         return $mmSitesManager.getSite(siteId).then(function(site) {
             var params = {
                     pageid: pageId
@@ -427,23 +434,15 @@ angular.module('mm.addons.mod_wiki')
      * @name $mmaModWiki#getPageForEditing
      * @param {Number}  pageId      Page ID.
      * @param {String}  [section]   section to get.
-     * @param {Boolean} [lockonly]  Just renew lock and not return content.
      * @return {Promise}            Promise resolved with wiki page contents.
      */
-    self.getPageForEditing = function(pageId, section, lockonly) {
+    self.getPageForEditing = function(pageId, section) {
         var params = {
                 pageid: pageId
             };
 
         if (section) {
             params.section = section;
-        }
-
-        if (lockonly) {
-            // This parameter requires Moodle 3.2. It saves network usage.
-            if ($mmSite.isVersionGreaterEqualThan('3.2')) {
-                params.lockonly = 1;
-            }
         }
 
         return $mmSite.write('mod_wiki_get_page_for_editing', params).then(function(response) {
@@ -455,154 +454,29 @@ angular.module('mm.addons.mod_wiki')
     };
 
     /**
-     * Check if a page title is already used.
-     *
-     * @param  {Number} wikiId    Wiki ID.
-     * @param  {Number} subwikiId Subwiki ID.
-     * @param  {String} title     Page title.
-     * @param  {String} [siteId]  Site ID. If not defined, current site.
-     * @return {Promise}          Promise resolved with true if used, resolved with false if not used, rejected if error.
-     */
-    self.isTitleUsed = function(wikiId, subwikiId, title, siteId) {
-        // First get the subwiki.
-        return self.getSubwikis(wikiId, siteId).then(function(subwikis) {
-            // Search the subwiki.
-            for (var i = 0, len = subwikis.length; i < len; i++) {
-                var subwiki = subwikis[i];
-                if (subwiki.id == subwikiId) {
-                    return subwiki;
-                }
-            }
-            return $q.reject();
-        }).then(function(subwiki) {
-            return self.getSubwikiPages(wikiId, subwiki.groupid, subwiki.userid, null, null, false, siteId);
-        }).then(function(pages) {
-            // Check if there's any page with the same title.
-            for (var i = 0, len = pages.length; i < len; i++) {
-                var page = pages[i];
-                if (page.title == title) {
-                    return true;
-                }
-            }
-            return false;
-        }).catch(function() {
-            return false;
-        });
-    };
-
-    /**
-     * Create a new page on a subwiki.
+     * Create a new page on a subwiki. It does not cache calls.
      *
      * @module mm.addons.mod_wiki
      * @ngdoc method
      * @name $mmaModWiki#newPage
-     * @param  {String} title       Title to create the page.
-     * @param  {String} content     Content to save on the page.
-     * @param  {Number} [subwikiId] Subwiki ID. If not defined, wikiId, userId and groupId should be defined.
-     * @param  {Number} [wikiId]    Wiki ID. Optional, will be used create subwiki if not informed.
-     * @param  {Number} [userId]    User ID. Optional, will be used create subwiki if not informed.
-     * @param  {Number} [groupId]   Group ID. Optional, will be used create subwiki if not informed.
-     * @param  {String} [siteId]    Site ID. If not defined, current site.
-     * @return {Promise}            Promise resolved with page ID if page was created in server, false if stored in device.
+     * @param {Number} subwikiId    Subwiki ID.
+     * @param {String} title        title to create the page.
+     * @param {String} content      content to save on the page.
+     * @return {Promise}            Promise resolved with wiki page contents.
      */
-    self.newPage = function(title, content, subwikiId, wikiId, userId, groupId, siteId) {
-        siteId = siteId || $mmSite.getId();
+    self.newPage = function(subwikiId, title, content) {
+        var params = {
+                title: title,
+                content: content,
+                contentformat: 'html',
+                subwikiid: subwikiId
+            };
 
-        if (!$mmApp.isOnline()) {
-            // App is offline, store the action.
-            return storeOffline();
-        }
-
-        // Discard stored content for this page. If it exists it means the user is editing it.
-        return $mmaModWikiOffline.deleteNewPage(title, subwikiId, wikiId, userId, groupId, siteId).then(function() {
-            // Try to create it in online.
-            return self.newPageOnline(title, content, subwikiId, wikiId, userId, groupId, siteId).then(function(pageId) {
-                return pageId;
-            }).catch(function(error) {
-                if (error && error.wserror) {
-                    // The WebService has thrown an error, this means that responses cannot be deleted.
-                    return $q.reject(error.error);
-                } else {
-                    // Couldn't connect to server, store in offline.
-                    return storeOffline();
-                }
-            });
-        });
-
-        // Convenience function to store a new page to be synchronized later.
-        function storeOffline() {
-            var promise;
-
-            if (wikiId) {
-                // We have wiki ID, check if there's already an online page with this title and subwiki.
-                promise = self.isTitleUsed(wikiId, subwikiId, title, siteId).catch(function() {
-                    // Error, assume not used.
-                    return false;
-                }).then(function(used) {
-                    if (used) {
-                        return $mmLang.translateAndReject('mma.mod_wiki.pageexists');
-                    }
-                });
-            } else {
-                promise = $q.when();
+        return $mmSite.write('mod_wiki_new_page', params).then(function(response) {
+            if (response.pageid) {
+                return response.pageid;
             }
-
-            return promise.then(function() {
-                return $mmaModWikiOffline.saveNewPage(title, content, subwikiId, wikiId, userId, groupId, siteId).then(function() {
-                    return false;
-                });
-            });
-        }
-    };
-
-    /**
-     * Create a new page on a subwiki. It does not cache calls. It will fail if offline or cannot connect.
-     *
-     * @module mm.addons.mod_wiki
-     * @ngdoc method
-     * @name $mmaModWiki#newPageOnline
-     * @param  {String} title       Title to create the page.
-     * @param  {String} content     Content to save on the page.
-     * @param  {Number} [subwikiId] Subwiki ID. If not defined, wikiId, userId and groupId should be defined.
-     * @param  {Number} [wikiId]    Wiki ID. Optional, will be used create subwiki if not informed.
-     * @param  {Number} [userId]    User ID. Optional, will be used create subwiki if not informed.
-     * @param  {Number} [groupId]   Group ID. Optional, will be used create subwiki if not informed.
-     * @param  {String} [siteId]    Site ID. If not defined, current site.
-     * @return {Promise}            Promise resolved if created, rejected otherwise. Reject param is an object with:
-     *                                   - error: The error message.
-     *                                   - wserror: True if it's an error returned by the WebService, false otherwise.
-     */
-    self.newPageOnline = function(title, content, subwikiId, wikiId, userId, groupId, siteId) {
-        return $mmSitesManager.getSite(siteId).then(function(site) {
-            var params = {
-                    title: title,
-                    content: content,
-                    contentformat: 'html'
-                };
-
-            subwikiId = parseInt(subwikiId, 10) || 0;
-            wikiId = parseInt(wikiId, 10) > 0 ? parseInt(wikiId, 10) : 0;
-            if (subwikiId && subwikiId > 0) {
-                params.subwikiid = subwikiId;
-            } else if (wikiId) {
-                params.wikiid = wikiId;
-                params.userid = parseInt(userId, 10) > 0 ? parseInt(userId, 10) : 0;
-                params.groupid = parseInt(groupId, 10) > 0 ? parseInt(groupId, 10) : 0;
-            }
-
-            return site.write('mod_wiki_new_page', params).catch(function(error) {
-                return $q.reject({
-                    error: error,
-                    wserror: $mmUtil.isWebServiceError(error)
-                });
-            }).then(function(response) {
-                if (response.pageid) {
-                    return response.pageid;
-                }
-                return $q.reject({
-                    wserror: true
-                });
-            });
+            return $q.reject();
         });
     };
 
@@ -646,6 +520,7 @@ angular.module('mm.addons.mod_wiki')
      * @return {Promise}        Promise resolved when the data is invalidated.
      */
     self.invalidateWikiData = function(courseId, siteId) {
+        siteId = siteId || $mmSite.getId();
         return $mmSitesManager.getSite(siteId).then(function(site) {
             return site.invalidateWsCacheForKey(getWikiDataCacheKey(courseId));
         });
@@ -662,6 +537,7 @@ angular.module('mm.addons.mod_wiki')
      * @return {Promise}        Promise resolved when the data is invalidated.
      */
     self.invalidateSubwikis = function(wikiId, siteId) {
+        siteId = siteId || $mmSite.getId();
         self.clearSubwikiList(wikiId);
         return $mmSitesManager.getSite(siteId).then(function(site) {
             return site.invalidateWsCacheForKey(getWikiSubwikisCacheKey(wikiId));
@@ -679,6 +555,7 @@ angular.module('mm.addons.mod_wiki')
      * @return {Promise}        Promise resolved when the data is invalidated.
      */
     self.invalidateSubwikiPages = function(wikiId, siteId) {
+        siteId = siteId || $mmSite.getId();
         return $mmSitesManager.getSite(siteId).then(function(site) {
             return site.invalidateWsCacheForKeyStartingWith(getWikiSubwikiPagesCacheKeyPrefix(wikiId));
         });
@@ -695,6 +572,7 @@ angular.module('mm.addons.mod_wiki')
      * @return {Promise}        Promise resolved when the data is invalidated.
      */
     self.invalidateSubwikiFiles = function(wikiId, siteId) {
+        siteId = siteId || $mmSite.getId();
         return $mmSitesManager.getSite(siteId).then(function(site) {
             return site.invalidateWsCacheForKeyStartingWith(getWikiSubwikiFilesCacheKeyPrefix(wikiId));
         });
@@ -711,27 +589,28 @@ angular.module('mm.addons.mod_wiki')
      * @return {Promise}        Promise resolved when the data is invalidated.
      */
     self.invalidatePage = function(pageId, siteId) {
+        siteId = siteId || $mmSite.getId();
         return $mmSitesManager.getSite(siteId).then(function(site) {
             return site.invalidateWsCacheForKey(getWikiPageCacheKey(pageId));
         });
     };
 
     /**
-     * Invalidate the prefetched content except files.
-     * To invalidate files, use $mmaModWiki#invalidateFiles.
+     * Invalidate the prefetched content.
      *
      * @module mm.addons.mod_wiki
      * @ngdoc method
      * @name $mmaModWiki#invalidateContent
-     * @param {Number} moduleId The module ID.
+     * @param {Object} moduleId The module ID.
      * @param {Number} courseId Course ID.
      * @param  {String} [siteId] Site ID. If not defined, current site.
      * @return {Promise}
      */
     self.invalidateContent = function(moduleId, courseId, siteId) {
+        var promises = [];
         siteId = siteId || $mmSite.getId();
 
-        return self.getWiki(courseId, moduleId, 'coursemodule', siteId).then(function(wiki) {
+        promises.push(self.getWiki(courseId, moduleId, 'coursemodule', siteId).then(function(wiki) {
             var ps = [];
             // Do not invalidate wiki data before getting wiki info, we need it!
             ps.push(self.invalidateWikiData(courseId, siteId));
@@ -740,21 +619,11 @@ angular.module('mm.addons.mod_wiki')
             ps.push(self.invalidateSubwikiFiles(wiki.id, siteId));
 
             return $q.all(ps);
-        });
-    };
+        }));
 
-    /**
-     * Invalidate the prefetched files.
-     *
-     * @module mm.addons.mod_wiki
-     * @ngdoc method
-     * @name $mmaModWiki#invalidateFiles
-     * @param {Number} moduleId  The module ID.
-     * @param  {String} [siteId] Site ID. If not defined, current site.
-     * @return {Promise}         Promise resolved when the files are invalidated.
-     */
-    self.invalidateFiles = function(moduleId, siteId) {
-        return $mmFilepool.invalidateFilesByComponent(siteId, mmaModWikiComponent, moduleId);
+        promises.push($mmFilepool.invalidateFilesByComponent(siteId, mmaModWikiComponent, moduleId));
+
+        return $q.all(promises);
     };
 
     /**
@@ -769,6 +638,8 @@ angular.module('mm.addons.mod_wiki')
      */
     self.logView = function(id, siteId) {
         if (id) {
+            siteId = siteId || $mmSite.getId();
+
             return $mmSitesManager.getSite(siteId).then(function(site) {
                 var params = {
                     wikiid: id
@@ -791,6 +662,8 @@ angular.module('mm.addons.mod_wiki')
      */
     self.logPageView = function(id, siteId) {
         if (id) {
+            siteId = siteId || $mmSite.getId();
+
             return $mmSitesManager.getSite(siteId).then(function(site) {
                 var params = {
                     pageid: id
@@ -799,52 +672,6 @@ angular.module('mm.addons.mod_wiki')
             });
         }
         return $q.reject();
-    };
-
-    /**
-     * Sort an array of wiki pages by title.
-     *
-     * @module mm.addons.mod_wiki
-     * @ngdoc method
-     * @name $mmaModWiki#sortPagesByTitle
-     * @param  {Object[]} pages Pages to sort.
-     * @param  {Boolean} [desc] True to sort in descendent order, false to sort in ascendent order. Defaults to false.
-     * @return {Promise}        Promise resolved with the pages.
-     */
-    self.sortPagesByTitle = function(pages, desc) {
-        return pages.sort(function (a, b) {
-            var result = a.title >= b.title ? 1 : -1;
-            if (!!desc) {
-                result = -result;
-            }
-            return result;
-        });
-    };
-
-    /**
-     * Check if a wiki has a certain subwiki.
-     *
-     * @module mm.addons.mod_wiki
-     * @ngdoc method
-     * @name $mmaModWiki#wikiHasSubwiki
-     * @param  {Number} wikiId    Wiki ID.
-     * @param  {Number} subwikiId Subwiki ID to search.
-     * @param  {String} [siteId]  Site ID. If not defined, current site.
-     * @return {Promise}          Promise resolved with true if it has subwiki, resolved with false otherwise.
-     */
-    self.wikiHasSubwiki = function(wikiId, subwikiId, siteId) {
-        // Get the subwikis to check if any of them matches the current one.
-        return self.getSubwikis(wikiId, siteId).then(function(subwikis) {
-            for (var i = 0; i < subwikis.length; i++) {
-                if (subwikis[i].id == subwikiId) {
-                    return true;
-                }
-            }
-            return false;
-        }).catch(function() {
-            // Not found, return false.
-            return false;
-        });
     };
 
     return self;

@@ -21,7 +21,7 @@ angular.module('mm.addons.mod_assign')
  * @ngdoc directive
  * @name mmaModAssignSubmissionOnlinetext
  */
-.directive('mmaModAssignSubmissionOnlinetext', function($mmaModAssign, $mmText, $timeout, $q, $mmUtil, $mmaModAssignOffline) {
+.directive('mmaModAssignSubmissionOnlinetext', function($mmaModAssign, $mmText, $timeout, $q, $mmUtil) {
 
     return {
         restrict: 'A',
@@ -47,17 +47,9 @@ angular.module('mm.addons.mod_assign')
             promise.then(function(enabled) {
                 rteEnabled = enabled;
 
-                // Get the text. Check if we have anything offline.
-                return $mmaModAssignOffline.getSubmission(scope.assign.id).catch(function() {
-                    // No offline data found.
-                }).then(function(offlineData) {
-                    if (offlineData && offlineData.plugindata && offlineData.plugindata.onlinetext_editor) {
-                        return offlineData.plugindata.onlinetext_editor.text;
-                    }
-
-                    // No offline data found, return online text.
-                    return $mmaModAssign.getSubmissionPluginText(scope.plugin, scope.edit && !rteEnabled);
-                });
+                // Get the text.
+                var text = $mmaModAssign.getSubmissionPluginText(scope.plugin, scope.edit && !rteEnabled);
+                return text;
             }).then(function(text) {
                 // We receive them as strings, convert to int.
                 scope.configs.wordlimit = parseInt(scope.configs.wordlimit, 10);
@@ -67,9 +59,7 @@ angular.module('mm.addons.mod_assign')
                 scope.model = {
                     text: text
                 };
-                if (rteEnabled) {
-                    scope.plugin.rteInitialText = text;
-                }
+                scope.plugin.rteInitialText = text;
 
                 if (!scope.edit) {
                     // Not editing, see full text when clicked.
@@ -78,7 +68,7 @@ angular.module('mm.addons.mod_assign')
                         e.stopPropagation();
                         if (text) {
                             // Open a new state with the interpolated contents.
-                            $mmText.expandText(scope.plugin.name, text, false, scope.assignComponent, scope.assign.cmid);
+                            $mmText.expandText(scope.plugin.name, text);
                         }
                     });
                 }

@@ -44,7 +44,7 @@ angular.module('mm.addons.mod_assign')
  *
  * @see $mmaModAssignSubmissionDelegate#registerHandler to see the methods your handle needs to implement.
  */
-.factory('$mmaModAssignSubmissionDelegate', function($log, $mmSite, $mmUtil, $q, $translate) {
+.factory('$mmaModAssignSubmissionDelegate', function($log, $mmSite, $mmUtil, $q) {
     $log = $log.getInstance('$mmaModAssignSubmissionDelegate');
 
     var handlers = {},
@@ -52,27 +52,6 @@ angular.module('mm.addons.mod_assign')
         self = {},
         updatePromises = {},
         lastUpdateHandlersStart;
-
-    /**
-     * Check if the plugin can be edited in offline for existing submissions.
-     * In general, this should return false if the plugin uses Moodle filters. The reason is that the app only prefetches
-     * filtered data, and the user should edit unfiltered data.
-     *
-     * @module mm.addons.mod_assign
-     * @ngdoc method
-     * @name $mmaModAssignSubmissionDelegate#canPluginEditOffline
-     * @param  {Object} assign     Assignment.
-     * @param  {Object} submission Submission.
-     * @param  {Object} plugin     Plugin.
-     * @return {Boolean}           Whether the plugin can be edited in offline for existing submissions.
-     */
-    self.canPluginEditOffline = function(assign, submission, plugin) {
-        var handler = self.getPluginHandler(plugin.type);
-        if (handler && handler.canEditOffline) {
-            return handler.canEditOffline(assign, submission, plugin);
-        }
-        return false;
-    };
 
     /**
      * Clear some temporary data because a submission was cancelled.
@@ -113,27 +92,6 @@ angular.module('mm.addons.mod_assign')
     };
 
     /**
-     * Delete offline data stored for a certain submission and plugin.
-     *
-     * @module mm.addons.mod_assign
-     * @ngdoc method
-     * @name $mmaModAssignSubmissionDelegate#deletePluginOfflineData
-     * @param  {Object} assign      Assignment.
-     * @param  {Object} submission  Submission.
-     * @param  {Object} plugin      Online plugin data.
-     * @param  {Object} offlineData Offline data stored for the submission.
-     * @param  {String} [siteId]    Site ID. If not defined, current site.
-     * @return {Promise}            Promise resolved when data has been gathered.
-     */
-    self.deletePluginOfflineData = function(assign, submission, plugin, offlineData, siteId) {
-        var handler = self.getPluginHandler(plugin.type);
-        if (handler && handler.deleteOfflineData) {
-            return $q.when(handler.deleteOfflineData(assign, submission, plugin, offlineData, siteId));
-        }
-        return $q.when();
-    };
-
-    /**
      * Get the directive to use for a certain submission plugin.
      *
      * @module mm.addons.mod_assign
@@ -147,34 +105,6 @@ angular.module('mm.addons.mod_assign')
         var handler = self.getPluginHandler(plugin.type);
         if (handler && handler.getDirectiveName) {
             return handler.getDirectiveName(plugin, edit);
-        }
-    };
-
-    /**
-     * Get a readable name to use for a certain submission plugin.
-     *
-     * @module mm.addons.mod_assign
-     * @ngdoc method
-     * @name $mmaModAssignSubmissionDelegate#getPluginName
-     * @param  {Object} plugin Plugin to get the directive for.
-     * @return {String}        Human readable name. Undefined if no name, translation or directive found.
-     */
-    self.getPluginName = function(plugin) {
-        var handler = self.getPluginHandler(plugin.type);
-        if (handler && handler.getPluginName) {
-            return handler.getPluginName(plugin);
-        }
-
-        // Fallback to translated string.
-        var translationId = 'mma.mod_assign_submission_' + plugin.type + '.pluginname',
-            translation = $translate.instant(translationId);
-        if (translationId != translation) {
-            return translation;
-        }
-
-        // Fallback to WS string.
-        if (plugin.name) {
-            return plugin.name;
         }
     };
 
@@ -322,6 +252,27 @@ angular.module('mm.addons.mod_assign')
     };
 
     /**
+     * Prepare and return the data to submit for a certain submission plugin.
+     *
+     * @module mm.addons.mod_assign
+     * @ngdoc method
+     * @name $mmaModAssignSubmissionDelegate#preparePluginSubmissionData
+     * @param  {Object} assign     Assignment.
+     * @param  {Object} submission Submission to check data.
+     * @param  {Object} plugin     Plugin to get the data for.
+     * @param  {Object} inputData  Data entered in the submission form.
+     * @param  {Object} pluginData Object where to add the plugin data.
+     * @return {Promise}           Promise resolved when data has been gathered.
+     */
+    self.preparePluginSubmissionData = function(assign, submission, plugin, inputData, pluginData) {
+        var handler = self.getPluginHandler(plugin.type);
+        if (handler && handler.prepareSubmissionData) {
+            return $q.when(handler.prepareSubmissionData(assign, submission, plugin, inputData, pluginData));
+        }
+        return $q.when();
+    };
+
+    /**
      * Prefetch any required data for a submission plugin.
      * This should NOT prefetch files. Files to be prefetched should be returned by the getPluginFiles function.
      *
@@ -345,53 +296,6 @@ angular.module('mm.addons.mod_assign')
     };
 
     /**
-     * Prepare and return the data to submit for a certain submission plugin.
-     *
-     * @module mm.addons.mod_assign
-     * @ngdoc method
-     * @name $mmaModAssignSubmissionDelegate#preparePluginSubmissionData
-     * @param  {Object} assign     Assignment.
-     * @param  {Object} submission Submission to check data.
-     * @param  {Object} plugin     Plugin to get the data for.
-     * @param  {Object} inputData  Data entered in the submission form.
-     * @param  {Object} pluginData Object where to add the plugin data.
-     * @param  {Boolean} offline   True to prepare the data for an offline submission, false otherwise.
-     * @param  {Number} [userId]   User ID. If not defined, site's current user.
-     * @param  {String} [siteId]   Site ID. If not defined, current site.
-     * @return {Promise}           Promise resolved when data has been gathered.
-     */
-    self.preparePluginSubmissionData = function(assign, submission, plugin, inputData, pluginData, offline, userId, siteId) {
-        var handler = self.getPluginHandler(plugin.type);
-        if (handler && handler.prepareSubmissionData) {
-            return $q.when(handler.prepareSubmissionData(
-                    assign, submission, plugin, inputData, pluginData, offline, userId, siteId));
-        }
-        return $q.when();
-    };
-
-    /**
-     * Prepare and add to pluginData the data to send to server to synchronize an offline submission.
-     *
-     * @module mm.addons.mod_assign
-     * @ngdoc method
-     * @name $mmaModAssignSubmissionDelegate#preparePluginSyncData
-     * @param  {Object} assign      Assignment.
-     * @param  {Object} submission  Submission.
-     * @param  {Object} plugin      Online plugin data.
-     * @param  {Object} offlineData Offline data stored for the submission.
-     * @param  {Object} pluginData  Object where to add the plugin data.
-     * @param  {String} [siteId]    Site ID. If not defined, current site.
-     * @return {Promise}            Promise resolved when data has been gathered.
-     */
-    self.preparePluginSyncData = function(assign, submission, plugin, offlineData, pluginData, siteId) {
-        var handler = self.getPluginHandler(plugin.type);
-        if (handler && handler.prepareSyncData) {
-            return $q.when(handler.prepareSyncData(assign, submission, plugin, offlineData, pluginData, siteId));
-        }
-        return $q.when();
-    };
-
-    /**
      * Register a submission plugin handler. The handler will be used when submitting an assign.
      *
      * @module mm.addons.mod_assign
@@ -402,44 +306,32 @@ angular.module('mm.addons.mod_assign')
      * @param {String|Object|Function} handler Must be resolved to an object defining the following properties. Or to a function
      *                           returning an object defining these properties. See {@link $mmUtil#resolveObject}.
      *                             - isEnabled (Boolean|Promise) Whether or not the handler is enabled on a site level.
-     *                                               When using a promise, it should return a boolean.
+     *                                                           When using a promise, it should return a boolean.
      *                             - isEnabledForEdit (Boolean|Promise) Whether or not the handler is enabled for edit on a site
-     *                                               level. When using a promise, it should return a boolean.
-     *                                               This should return true if the plugin has no submission component.
+     *                                                           level. When using a promise, it should return a boolean.
+     *                                                           This should return true if the plugin has no submission component.
      *                             - getDirectiveName(plugin, edit) (String) Optional. Returns the name of the directive to render
-     *                                               the plugin.
-     *                             - prepareSubmissionData(assign, submission, plugin, inputData, pluginData, offline, userId, siteId).
-     *                                               Should prepare and add to pluginData the data to send to server based in the
-     *                                               input. Return promise if async.
+     *                                                           the plugin.
+     *                             - prepareSubmissionData(assign, submission, plugin, inputData, pluginData). Should prepare and
+     *                                                           add to pluginData the data to send to server based in the input.
+     *                                                           Return promise if async.
      *                             - copySubmissionData(assign, plugin, pluginData). Function meant to copy a submission. Should
-     *                                               add to pluginData the data to send to server based in the data in plugin
-     *                                               (previous attempt).
+     *                                                           add to pluginData the data to send to server based in the data
+     *                                                           in plugin (previous attempt).
      *                             - hasDataChanged(assign, submission, plugin, inputData) (Promise|Boolean) Check if the
-     *                                               submission data has changed for this plugin.
+     *                                                           submission data has changed for this plugin.
      *                             - clearTmpData(assign, submission, plugin, inputData). Optional. Should clear temporary data
-     *                                               for a cancelled submission.
+     *                                                           for a cancelled submission.
      *                             - getSizeForCopy(assign, plugin). Optional. Get the size of data (in bytes) this plugin will
-     *                                               send to copy a previous attempt.
+     *                                                           send to copy a previous attempt.
      *                             - getSizeForEdit(assign, submission, plugin, inputData). Optional. Get the size of data (in
-     *                                               bytes) this plugin will send to add or edit a submission.
+     *                                                           bytes) this plugin will send to add or edit a submission.
      *                             - getPluginFiles(assign, submission, plugin, siteId). Optional. Get files used by this plugin.
-     *                                               The files returned by this function will be prefetched when the user
-     *                                               prefetches the assign.
+     *                                                           The files returned by this function will be prefetched when the
+     *                                                           user prefetches the assign.
      *                             - prefetch(assign, submission, plugin, siteId). Optional. Prefetch any required data for the
-     *                                               plugin. This should NOT prefetch files. Files to be prefetched should be
-     *                                               returned by the getPluginFiles function.
-     *                             - deleteOfflineData(assign, submission, plugin, offlineData, siteId). Optional. Delete any
-     *                                               stored data for the plugin and submission.
-     *                             - prepareSyncData(assign, submission, plugin, offlineData, pluginData, siteId). Optional. Should
-     *                                               prepare and add to pluginData the data to send to server based in the offline
-     *                                               data stored. This is to perform a synchronziation.
-     *                             - getPluginName(plugin). Optional. Should return a human readable String. If not present, default
-     *                                               translation will be applied. If translation not found, optional name will
-     *                                               be used.
-     *                             - canEditOffline(assign, submission, plugin). Optional. True if the plugin can be edited in
-     *                                               offline for existing submissions. In general, this should return false if the
-     *                                               plugin uses Moodle filters. The reason is that the app only prefetches filtered
-     *                                               data, and the user should edit unfiltered data. Defaults to false.
+     *                                                           plugin. This should NOT prefetch files. Files to be prefetched
+     *                                                           should be returned by the getPluginFiles function.
      */
     self.registerHandler = function(addon, pluginType, handler) {
         if (typeof handlers[pluginType] !== 'undefined') {

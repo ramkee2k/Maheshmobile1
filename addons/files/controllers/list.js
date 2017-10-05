@@ -34,7 +34,7 @@ angular.module('mm.addons.files')
                 $scope.title = $translate.instant('mma.files.sitefiles');
             } else if (root === 'my') {
                 promise = $mmaFiles.getMyFiles();
-                $scope.title = $translate.instant('mma.files.files');
+                $scope.title = $translate.instant('mma.files.myprivatefiles');
             } else {
                 // Upon error we create a fake promise that is rejected.
                 promise = $q.reject();
@@ -71,7 +71,9 @@ angular.module('mm.addons.files')
         });
     };
 
-    $scope.showUpload = root === 'my' && !path && $mmSite.canUploadFiles() && !$mmaFiles.isUploadDisabledInSite();
+    $scope.showUpload = function() {
+        return (root === 'my' && !path && $mmSite.canUploadFiles());
+    };
 
     // When we are in the root of the private files we can add more files.
     $scope.add = function() {

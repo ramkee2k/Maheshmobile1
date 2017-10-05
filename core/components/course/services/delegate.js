@@ -103,54 +103,6 @@ angular.module('mm.core.course')
         };
 
         /**
-         * Check if the controller a content handler is avalaible (not necessarily enabled).
-         *
-         * @module mm.core.course
-         * @ngdoc method
-         * @name $mmCourseDelegate#hasContentHandler
-         * @param {String} handles   The module to work on
-         * @return {Boolean} If the controller is installed or not.
-         */
-        self.hasContentHandler = function(handles) {
-            return typeof contentHandlers[handles] !== 'undefined';
-        };
-
-        /**
-         * Check if a certain module is disabled in a site.
-         *
-         * @module mm.core.course
-         * @ngdoc method
-         * @name $mmCourseDelegate#isModuleDisabled
-         * @param {String} handles  The module to check.
-         * @param {String} [siteId] Site ID. If not defined, current site.
-         * @return {Promise}        True if disabled, false otherwise.
-         */
-        self.isModuleDisabled = function(handles, siteId) {
-            return $mmSitesManager.getSite(siteId).then(function(site) {
-                return self.isModuleDisabledInSite(handles, site);
-            });
-        };
-
-        /**
-         * Check if a certain module is disabled in a site.
-         *
-         * @module mm.core.course
-         * @ngdoc method
-         * @name $mmCourseDelegate#isModuleDisabledInSite
-         * @param  {String} handles The module to check.
-         * @param  {Object} [site]  Site. If not defined, use current site.
-         * @return {Boolean}        True if disabled, false otherwise.
-         */
-        self.isModuleDisabledInSite = function(handles, site) {
-            site = site || $mmSite;
-
-            if (typeof contentHandlers[handles] !== 'undefined') {
-                return site.isFeatureDisabled('$mmCourseDelegate_' + contentHandlers[handles].addon);
-            }
-            return false;
-        };
-
-        /**
          * Check if a time belongs to the last update handlers call.
          * This is to handle the cases where updateContentHandlers don't finish in the same order as they're called.
          *
@@ -189,8 +141,6 @@ angular.module('mm.core.course')
 
             if (!$mmSite.isLoggedIn()) {
                 promise = $q.reject();
-            } else if ($mmSite.isFeatureDisabled('$mmCourseDelegate_' + handlerInfo.addon)) {
-                promise = $q.when(false);
             } else {
                 promise = $q.when(handlerInfo.instance.isEnabled());
             }

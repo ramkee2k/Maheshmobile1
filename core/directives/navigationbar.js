@@ -29,8 +29,6 @@ angular.module('mm.core')
  * @param {Function} [action]   Function to call when an arrow is clicked. Will receive as a param the item to load.
  * @param {String}   [info]     Info to show when clicking the info button. If not defined, the info button won't be shown.
  * @param {String}   [title]    Title to show when seeing the info (new state).
- * @param {String} [component]   Component the bar belongs to.
- * @param {Number} [componentId] Component ID.
  */
 .directive('mmNavigationBar', function($state, $translate) {
     return {
@@ -39,9 +37,7 @@ angular.module('mm.core')
             previous: '=?',
             next: '=?',
             action: '=?',
-            info: '=?',
-            component: '@?',
-            componentId: '@?'
+            info: '=?'
         },
         templateUrl: 'core/templates/navigationbar.html',
         link: function(scope, element, attrs) {
@@ -49,9 +45,7 @@ angular.module('mm.core')
             scope.showInfo = function() {
                 $state.go('site.mm_textviewer', {
                     title: scope.title,
-                    content: scope.info,
-                    component: attrs.component,
-                    componentId: attrs.componentId
+                    content: scope.info
                 });
             };
         }

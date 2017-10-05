@@ -8,6 +8,5 @@
     "personalnotes": "Personal notes",
     "publishstate": "Context",
     "sitenotes": "Site notes",
-    "userwithid": "User with Id {{id}}",
-    "warningnotenotsent": "Couldn't add note(s) to course {{course}}. {{error}}"
+    "userwithid": "User with Id {{id}}"
 }

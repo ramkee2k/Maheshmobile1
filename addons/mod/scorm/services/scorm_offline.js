@@ -39,8 +39,11 @@ angular.module('mm.addons.mod_scorm')
                     name: 'timemodified'
                 },
                 {
+                    // Not using compound indexes because they seem to have issues with where().
                     name: 'scormAndUser',
-                    keyPath: ['scormid', 'userid']
+                    generator: function(obj) {
+                        return [obj.scormid, obj.userid];
+                    }
                 }
             ]
         },
@@ -67,12 +70,18 @@ angular.module('mm.addons.mod_scorm')
                     name: 'synced'
                 },
                 {
+                    // Not using compound indexes because they seem to have issues with where().
                     name: 'scormUserAttempt',
-                    keyPath: ['scormid', 'userid', 'attempt']
+                    generator: function(obj) {
+                        return [obj.scormid, obj.userid, obj.attempt];
+                    }
                 },
                 {
+                    // Not using compound indexes because they seem to have issues with where().
                     name: 'scormUserAttemptSynced',
-                    keyPath: ['scormid', 'userid', 'attempt', 'synced']
+                    generator: function(obj) {
+                        return [obj.scormid, obj.userid, obj.attempt, obj.synced];
+                    }
                 }
             ]
         }
@@ -88,10 +97,11 @@ angular.module('mm.addons.mod_scorm')
  * @name $mmaModScormOffline
  */
 .factory('$mmaModScormOffline', function($mmSite, $mmUtil, $q, $log, $mmSitesManager, mmaModScormOfflineAttemptsStore,
-            mmaModScormOfflineTracksStore, $mmSyncBlock, mmaModScormComponent) {
+            mmaModScormOfflineTracksStore) {
     $log = $log.getInstance('$mmaModScormOffline');
 
-    var self = {};
+    var self = {},
+        blockedScorms = {};
 
     /**
      * Changes an attempt number in the data stored in offline.
@@ -121,7 +131,10 @@ angular.module('mm.addons.mod_scorm')
                     timemodified: $mmUtil.timestamp()
                 };
 
-            $mmSyncBlock.blockOperation(mmaModScormComponent, scormId, 'changeAttemptNumber', siteId); // Block the SCORM so it can't be synced.
+            if (!blockedScorms[siteId]) {
+                blockedScorms[siteId] = {};
+            }
+            blockedScorms[siteId][scormId] = true; // Block the SCORM so it can't be synced.
 
             // Get current data.
             return db.get(mmaModScormOfflineAttemptsStore, [scormId, userId, attempt]).then(function(entry) {
@@ -154,9 +167,26 @@ angular.module('mm.addons.mod_scorm')
                     });
                 });
             }).finally(function() {
-                $mmSyncBlock.unblockOperation(mmaModScormComponent, scormId, 'changeAttemptNumber', siteId); // Unblock the SCORM.
+                blockedScorms[siteId][scormId] = false; // Unblock the SCORM.
             });
         });
+    };
+
+    /**
+     * Clear blocked SCORMs.
+     *
+     * @module mm.addons.mod_scorm
+     * @ngdoc method
+     * @name $mmaModScormOffline#clearBlockedScorms
+     * @param {String} [siteId] If set, clear the blocked SCORMs only for this site. Otherwise clear all SCORMs.
+     * @return {Void}
+     */
+    self.clearBlockedScorms = function(siteId) {
+        if (siteId) {
+            delete blockedScorms[siteId];
+        } else {
+            blockedScorms = {};
+        }
     };
 
     /**
@@ -178,7 +208,10 @@ angular.module('mm.addons.mod_scorm')
             $log.debug('Creating new offline attempt ' + attempt + ' in SCORM ' + scorm.id);
             userId = userId || site.getUserId();
 
-            $mmSyncBlock.blockOperation(mmaModScormComponent, scorm.id, 'createNewAttempt', siteId); // Block the SCORM so it can't be synced.
+            if (!blockedScorms[siteId]) {
+                blockedScorms[siteId] = {};
+            }
+            blockedScorms[siteId][scorm.id] = true; // Block the SCORM so it can't be synced.
 
             // Create attempt in DB.
             var db = site.getDb(),
@@ -209,7 +242,7 @@ angular.module('mm.addons.mod_scorm')
                 });
                 return $q.all(promises);
             }).finally(function() {
-                $mmSyncBlock.unblockOperation(mmaModScormComponent, scorm.id, 'createNewAttempt', siteId); // Unblock the SCORM.
+                blockedScorms[siteId][scorm.id] = false; // Unblock the SCORM.
             });
         });
     };
@@ -421,18 +454,16 @@ angular.module('mm.addons.mod_scorm')
         return $mmSitesManager.getSite(siteId).then(function(site) {
             userId = userId || site.getUserId();
 
-            var fieldName, where;
+            var where;
 
             if (excludeSynced && excludeNotSynced) {
                 return $q.when([]);
             } else if (excludeSynced || excludeNotSynced) {
-                fieldName = 'scormUserAttemptSynced';
-                where = [scormId, userId, attempt, excludeNotSynced ? 1 : 0];
+                where = ['scormUserAttemptSynced', '=', [scormId, userId, attempt, excludeNotSynced ? 1 : 0]];
             } else {
-                fieldName = 'scormUserAttempt';
-                where = [scormId, userId, attempt];
+                where = ['scormUserAttempt', '=', [scormId, userId, attempt]];
             }
-            return site.getDb().whereEqual(mmaModScormOfflineTracksStore, fieldName, where);
+            return site.getDb().query(mmaModScormOfflineTracksStore, where);
         });
     };
 
@@ -694,6 +725,23 @@ angular.module('mm.addons.mod_scorm')
     }
 
     /**
+     * Check if a SCORM is blocked by a writing function.
+     *
+     * @module mm.addons.mod_scorm
+     * @ngdoc method
+     * @name $mmaModScormOffline#isScormBlocked
+     * @param  {String} siteId   Site ID.
+     * @param  {Number} scormId  SCORM ID.
+     * @return {Boolean}         True if blocked, false otherwise.
+     */
+    self.isScormBlocked = function(siteId, scormId) {
+        if (!blockedScorms[siteId]) {
+            return false;
+        }
+        return !!blockedScorms[siteId][scormId];
+    };
+
+    /**
      * Mark all the entries from a SCO and attempt as synced.
      *
      * @module mm.addons.mod_scorm
@@ -757,9 +805,14 @@ angular.module('mm.addons.mod_scorm')
      */
     self.saveTracks = function(siteId, scorm, scoId, attempt, tracks, userData) {
         return $mmSitesManager.getSite(siteId).then(function(site) {
-            var userId = site.getUserId();
+            var userId = site.getUserId(),
+                initialBlocked;
 
-            $mmSyncBlock.blockOperation(mmaModScormComponent, scorm.id, 'saveTracksOffline', siteId); // Block the SCORM so it can't be synced.
+            if (!blockedScorms[siteId]) {
+                blockedScorms[siteId] = {};
+            }
+            initialBlocked = !!blockedScorms[siteId][scorm.id]; // Save initial blocked state.
+            blockedScorms[siteId][scorm.id] = true; // Block the SCORM so it can't be synced.
 
             // Insert all the tracks.
             var promises = [];
@@ -768,8 +821,9 @@ angular.module('mm.addons.mod_scorm')
                                             track.element, track.value, scorm.forcecompleted, userData[scoId]));
             });
             return $q.all(promises).finally(function() {
-                // Unblock the SCORM operation.
-                $mmSyncBlock.unblockOperation(mmaModScormComponent, scorm.id, 'saveTracksOffline', siteId);
+                if (!initialBlocked) {
+                    blockedScorms[siteId][scorm.id] = false; // Unblock the SCORM only if it wasn't blocked by another function.
+                }
             });
         });
     };

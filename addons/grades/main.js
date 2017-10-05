@@ -16,23 +16,40 @@ angular.module('mm.addons.grades', [])
 
 .constant('mmaGradesPriority', 400)
 .constant('mmaGradesViewGradesPriority', 400)
-.constant('mmaGradesSideMenuPriority', 950)
-
 
 .config(function($stateProvider, $mmUserDelegateProvider, $mmCoursesDelegateProvider, $mmContentLinksDelegateProvider,
-            $mmSideMenuDelegateProvider, mmaGradesPriority, mmaGradesViewGradesPriority, mmaGradesSideMenuPriority) {
+            mmaGradesPriority, mmaGradesViewGradesPriority) {
 
     $stateProvider
 
-    .state('site.coursesgrades', {
-        url: '/coursesgrades',
+    .state('site.grades', {
+        url: '/grades',
         views: {
             'site': {
-                templateUrl: 'addons/grades/templates/courses.html',
-                controller: 'mmaGradesCoursesGradesCtrl'
+                templateUrl: 'addons/grades/templates/table.html',
+                controller: 'mmaGradesTableCtrl'
             }
+        },
+        params: {
+            course: null,
+            userid: null
         }
-    });
+    })
+
+    .state('site.grade', {
+        url: '/grade',
+        views: {
+            'site': {
+                templateUrl: 'addons/grades/templates/grade.html',
+                controller: 'mmaGradesGradeCtrl'
+            }
+        },
+        params: {
+            courseid: null,
+            userid: null,
+            gradeid: null
+        }
+    });;
 
 
     // Register plugin on user profile.
@@ -42,9 +59,5 @@ angular.module('mm.addons.grades', [])
     $mmCoursesDelegateProvider.registerNavHandler('mmaGrades', '$mmaGradesHandlers.coursesNav', mmaGradesPriority);
 
     // Register content links handler.
-    $mmContentLinksDelegateProvider.registerLinkHandler('mmaGrades:user', '$mmaGradesHandlers.userLinksHandler');
-    $mmContentLinksDelegateProvider.registerLinkHandler('mmaGrades:overview', '$mmaGradesHandlers.overviewLinksHandler');
-
-    // Register side menu addon.
-    $mmSideMenuDelegateProvider.registerNavHandler('mmaGrades', '$mmaGradesHandlers.sideMenuNav', mmaGradesSideMenuPriority);
+    $mmContentLinksDelegateProvider.registerLinkHandler('mmaGrades', '$mmaGradesHandlers.linksHandler');
 });

@@ -1,8 +1,8 @@
 {
-    "activities": "الأنشطة",
+    "activities": "أنشطة",
     "duedate": "تاريخ تقديم مهمة",
     "errornocompetenciesfound": "لا يوجد أي قدرات موجودة",
-    "myplans": "خططي للتعلم",
+    "mylearningplans": "خططي للتعلم",
     "nocompetencies": "لا يوجد أي قدرات",
     "path": "مسار",
     "progress": "تقدّم الطالب",

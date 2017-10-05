@@ -23,7 +23,7 @@ angular.module('mm.addons.mod_scorm')
  */
 .controller('mmaModScormPlayerCtrl', function($scope, $stateParams, $mmaModScorm, $mmUtil, $ionicPopover, $mmaModScormHelper,
             $mmEvents, $timeout, $q, mmaModScormEventUpdateToc, mmaModScormEventLaunchNextSco, mmaModScormEventLaunchPrevSco,
-            $mmaModScormDataModel12, mmaModScormEventGoOffline, $mmaModScormSync, $mmSyncBlock, mmaModScormComponent) {
+            $mmaModScormDataModel12, mmaModScormEventGoOffline, $mmaModScormSync) {
 
     var scorm = $stateParams.scorm || {},
         mode = $stateParams.mode || $mmaModScorm.MODENORMAL,
@@ -34,9 +34,6 @@ angular.module('mm.addons.mod_scorm')
         userData,
         apiInitialized = false,
         offline = false;
-
-    // Block the SCORM so it cannot be synced.
-    $mmSyncBlock.blockOperation(mmaModScormComponent, scorm.id, 'playerCtrl');
 
     $scope.title = scorm.name; // We use SCORM name at start, later we'll use the SCO title.
     $scope.scorm = scorm;
@@ -333,8 +330,5 @@ angular.module('mm.addons.mod_scorm')
         launchNextObserver && launchNextObserver.off && launchNextObserver.off();
         launchPrevObserver && launchPrevObserver.off && launchPrevObserver.off();
         goOfflineObserver && goOfflineObserver.off && goOfflineObserver.off();
-
-        // Unblock the SCORM so it can be synced.
-        $mmSyncBlock.unblockOperation(mmaModScormComponent, scorm.id, 'playerCtrl');
     });
 });

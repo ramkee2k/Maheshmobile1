@@ -24,6 +24,7 @@ angular.module('mm.core')
 .factory('$mmText', function($q, $mmLang, $translate, $state) {
 
     var self = {},
+        extensionRegex = new RegExp('^[a-z0-9]+$'),
         element = document.createElement('div'); // Fake element to use in some functions, to prevent re-creating it each time.
 
     /**
@@ -90,20 +91,12 @@ angular.module('mm.core')
      * @return {String}               Text cleaned.
      */
     self.cleanTags = function(text, singleLine) {
-        if (!text) {
-            return '';
-        }
-        if (!text.replace) {
-            // Not a string, leave it as it is.
-            return text;
-        }
-
         // First, we use a regexpr.
         text = text.replace(/(<([^>]+)>)/ig,"");
         // Then, we rely on the browser. We need to wrap the text to be sure is HTML.
         text = angular.element('<p>').html(text).text(); // Get directive's content.
         // Recover or remove new lines.
-        text = self.replaceNewLines(text, singleLine ? ' ' : '<br>');
+        text = self.replaceNewLines(text, singleLine ? ' ' : '<br />');
         return text;
     };
 
@@ -146,30 +139,6 @@ angular.module('mm.core')
     };
 
     /**
-     * Formats a text, in HTML replacing new lines by correct html new lines.
-     *
-     * @module mm.core
-     * @ngdoc method
-     * @name $mmText#formatHtmlLines
-     * @param  {String} text             Text to format.
-     * @return {String}                  Formatted text.
-     */
-    self.formatHtmlLines = function(text) {
-        var hasHTMLTags = self.hasHTMLTags(text);
-        if (text.indexOf('<p>') == -1) {
-            // Wrap the text in <p> tags.
-            text = '<p>' + text + '</p>';
-        }
-
-        if (!hasHTMLTags) {
-            // The text doesn't have HTML, replace new lines for <br>.
-            return self.replaceNewLines(text, '<br>');
-        }
-
-        return text;
-    };
-
-    /**
      * Shortens a text to length and adds an ellipsis.
      *
      * @module mm.core
@@ -199,21 +168,17 @@ angular.module('mm.core')
      * @module mm.core
      * @ngdoc method
      * @name $mmText#expandText
-     * @param  {String} title              Title of the new state.
-     * @param  {String} text               Content of the text to be expanded.
-     * @param  {Boolean} replaceLineBreaks Replace line breaks by br tag. Default: false.
-     * @param  {String} [component]        Component to link the embedded files to.
-     * @param  {Mixed} [componentId]       An ID to use in conjunction with the component.
+     * @param  {String} title Title of the new state.
+     * @param  {String} text  Content of the text to be expanded.
+     * @param  {Boolean} replaceLineBreaks  Replace line breaks by br tag. Default: false.
      */
-    self.expandText = function(title, text, replaceLineBreaks, component, componentId) {
+    self.expandText = function(title, text, replaceLineBreaks) {
         if (text.length > 0) {
             // Open a new state with the interpolated contents.
             $state.go('site.mm_textviewer', {
                 title: title,
                 content: text,
-                replacelinebreaks: replaceLineBreaks,
-                component: component,
-                componentId: componentId
+                replacelinebreaks: replaceLineBreaks
             });
         }
     };
@@ -419,6 +384,39 @@ angular.module('mm.core')
     };
 
     /**
+     * Guess the extension of a file from its URL.
+     *
+     * This is very weak and unreliable.
+     *
+     * @module mm.core
+     * @ngdoc method
+     * @name $mmText#guessExtensionFromUrl
+     * @param {String} fileUrl The file URL.
+     * @return {String}        The lowercased extension without the dot, or undefined.
+     */
+    self.guessExtensionFromUrl = function(fileUrl) {
+        var split = fileUrl.split('.'),
+            candidate,
+            extension,
+            position;
+
+        if (split.length > 1) {
+            candidate = split.pop().toLowerCase();
+            // Remove params if any.
+            position = candidate.indexOf('?');
+            if (position > -1) {
+                candidate = candidate.substr(0, position);
+            }
+
+            if (extensionRegex.test(candidate)) {
+                extension = candidate;
+            }
+        }
+
+        return extension;
+    };
+
+    /**
      * If a number has only 1 digit, add a leading zero to it.
      *
      * @module mm.core
@@ -445,9 +443,6 @@ angular.module('mm.core')
      * @return {String}      Escaped text.
      */
     self.escapeForRegex = function(text) {
-        if (!text || !text.replace) {
-            return '';
-        }
         return text.replace(/[-[\]{}()*+?.,\\^$|#\s]/g, "\\$&");
     };
 
@@ -482,12 +477,12 @@ angular.module('mm.core')
      * @module mm.core
      * @ngdoc method
      * @name $mmText#getTextPluginfileUrl
-     * @param  {Object[]} files Files to extract the URL from. They need to have the URL in a 'url' or 'fileurl' attribute.
+     * @param  {Object[]} files Files to extract the URL from. They need to have the URL in a 'fileurl' attribute.
      * @return {String}         Pluginfile URL, false if no files found.
      */
     self.getTextPluginfileUrl = function(files) {
         if (files && files.length) {
-            var fileURL = files[0].url || files[0].fileurl;
+            var fileURL = files[0].fileurl;
             // Remove text after last slash (encoded or not).
             return fileURL.substr(0, Math.max(fileURL.lastIndexOf('/'), fileURL.lastIndexOf('%2F')));
         }
@@ -502,7 +497,7 @@ angular.module('mm.core')
      * @ngdoc method
      * @name $mmText#replacePluginfileUrls
      * @param  {String} text    Text to treat.
-     * @param  {Object[]} files Files to extract the pluginfile URL from. They need to have the URL in a 'url'/'fileurl' attribute.
+     * @param  {Object[]} files Files to extract the pluginfile URL from. They need to have the URL in a 'fileurl' attribute.
      * @return {String}         Treated text.
      */
     self.replacePluginfileUrls = function(text, files) {
@@ -522,7 +517,7 @@ angular.module('mm.core')
      * @ngdoc method
      * @name $mmText#restorePluginfileUrls
      * @param  {String} text    Text to treat.
-     * @param  {Object[]} files Files to extract the pluginfile URL from.  They need to have the URL in a 'url'/'fileurl' attribute.
+     * @param  {Object[]} files Files to extract the pluginfile URL from.  They need to have the URL in a 'fileurl' attribute.
      * @return {String}         Treated text.
      */
     self.restorePluginfileUrls = function(text, files) {
@@ -533,196 +528,6 @@ angular.module('mm.core')
             }
         }
         return text;
-    };
-
-    /**
-     * Get the protocol from a URL.
-     * E.g. http://www.google.com returns 'http'.
-     *
-     * @module mm.core
-     * @ngdoc method
-     * @name $mmText#getUrlProtocol
-     * @param  {String} url URL to treat.
-     * @return {String}     Protocol, undefined if no protocol found.
-     */
-    self.getUrlProtocol = function(url) {
-        if (!url) {
-            return;
-        }
-
-        var matches = url.match(/^([^\/:\.\?]*):\/\//);
-        if (matches && matches[1]) {
-            return matches[1];
-        }
-    };
-
-    /**
-     * Get the scheme from a URL. Please notice that, if a URL has protocol, it will return the protocol.
-     * E.g. javascript:doSomething() returns 'javascript'.
-     *
-     * @module mm.core
-     * @ngdoc method
-     * @name $mmText#getUrlScheme
-     * @param  {String} url URL to treat.
-     * @return {String}     Scheme, undefined if no scheme found.
-     */
-    self.getUrlScheme = function(url) {
-        if (!url) {
-            return;
-        }
-
-        var matches = url.match(/^([a-z][a-z0-9+\-.]*):/);
-        if (matches && matches[1]) {
-            return matches[1];
-        }
-    };
-
-    /**
-     * Check if a text contains HTML tags.
-     *
-     * @module mm.core
-     * @ngdoc method
-     * @name $mmText#hasHTMLTags
-     * @param  {String} text Text to check.
-     * @return {Boolean}     True if has HTML tags, false otherwise.
-     */
-    self.hasHTMLTags = function(text) {
-        return /<[a-z][\s\S]*>/i.test(text);
-    };
-
-    /**
-     * Check if a text contains Unicode long chars.
-     * Using as threshold Hex value D800
-     *
-     * @module mm.core
-     * @ngdoc method
-     * @name $mmText#hasUnicode
-     * @param  {String} text Text to check.
-     * @return {Boolean}     True if has Unicode chars, false otherwise.
-     */
-    self.hasUnicode = function(text) {
-        for (var x = 0; x < text.length; x++) {
-            if (text.charCodeAt(x) > 55295) {
-                return true;
-            }
-        }
-        return false;
-    };
-
-    /**
-     * Check if an object has any long Unicode char.
-     *
-     * @module mm.core
-     * @ngdoc method
-     * @name $mmText#hasUnicodeData
-     * @param  {Mixed}  data  Object to be checked.
-     * @return {Boolean}      If the data has any long Unicode char on it.
-     */
-    self.hasUnicodeData = function(data) {
-        for (var el in data) {
-            if (angular.isObject(data[el])) {
-                if (self.hasUnicodeData(data[el])) {
-                    return true;
-                }
-            } else if (typeof data[el] == "string" && self.hasUnicode(data[el])) {
-                return true;
-            }
-        }
-        return false;
-    };
-
-    /**
-     * Strip Unicode long char of a given text.
-     * Using as threshold Hex value D800
-     *
-     * @module mm.core
-     * @ngdoc method
-     * @name $mmText#stripUnicode
-     * @param  {String} text Text to check.
-     * @return {String}      Without the Unicode chars.
-     */
-    self.stripUnicode = function(text) {
-        var stripped = "";
-        for (var x = 0; x < text.length; x++) {
-            if (text.charCodeAt(x) <= 55295){
-                stripped += text.charAt(x);
-            }
-        }
-        return stripped;
-    };
-
-    /**
-     * Same as Javascript's decodeURI, but if an exception is thrown it will return the original URI.
-     *
-     * @module mm.core
-     * @ngdoc method
-     * @name $mmText#decodeURI
-     * @param  {String} uri URI to decode.
-     * @return {String}     Decoded URI, or original URI if an exception is thrown.
-     */
-    self.decodeURI = function(uri) {
-        try {
-            return decodeURI(uri);
-        } catch(ex) {
-            // Error, use the original URI.
-        }
-        return uri;
-    };
-
-    /**
-     * Same as Javascript's decodeURIComponent, but if an exception is thrown it will return the original URI.
-     *
-     * @module mm.core
-     * @ngdoc method
-     * @name $mmText#decodeURIComponent
-     * @param  {String} uri URI to decode.
-     * @return {String}     Decoded URI, or original URI if an exception is thrown.
-     */
-    self.decodeURIComponent = function(uri) {
-        try {
-            return decodeURIComponent(uri);
-        } catch(ex) {
-            // Error, use the original URI.
-        }
-        return uri;
-    };
-
-    /**
-     * Same as Javascript's JSON.parse, but if an exception is thrown it will return the original text.
-     *
-     * @module mm.core
-     * @ngdoc method
-     * @name $mmText#parseJSON
-     * @param  {String} json JSON text.
-     * @return {Mixed}       JSON parsed as object or what it gets.
-     */
-    self.parseJSON = function(json) {
-        try {
-            return JSON.parse(json);
-        } catch(ex) {
-            // Error, use the json text.
-        }
-        return json;
-    };
-
-    /**
-     * Add quotes to HTML characters.
-     *
-     * Returns text with HTML characters (like "<", ">", etc.) properly quoted.
-     * Based on Moodle's s() function.
-     *
-     * @module mm.core
-     * @ngdoc method
-     * @name $mmText#s
-     * @param  {String} text Text to treat.
-     * @return {String}      Treated text.
-     */
-    self.s = function(text) {
-        if (!text && text !== '') {
-            return '0';
-        }
-
-        return self.escapeHTML(text).replace(/&amp;#(\d+|x[0-9a-f]+);/i, '&#$1;');
     };
 
     return self;

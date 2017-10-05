@@ -15,13 +15,10 @@
 angular.module('mm.addons.mod_wiki', [])
 
 .constant('mmaModWikiSubwikiPagesLoaded', 'mma_mod_wiki_subwiki_pages_loaded')
-.constant('mmaModWikiPageCreatedEvent', 'mma_mod_wiki_page_created')
-.constant('mmaModWikiManualSyncedEvent', 'mma_mod_wiki_manual_synced')
-.constant('mmaModWikiSubwikiAutomSyncedEvent', 'mma_mod_wiki_subwiki_autom_synced')
+
 .constant('mmaModWikiComponent', 'mmaModWiki')
 // Renew Lock Timeout in seconds.
 .constant('mmaModWikiRenewLockTimeout', 30)
-.constant('mmaModWikiSyncTime', 300000) // In milliseconds.
 
 .config(function($stateProvider) {
 
@@ -37,8 +34,6 @@ angular.module('mm.addons.mod_wiki', [])
             pagetitle: null,
             wikiid: null,
             subwikiid: null,
-            userid: null,
-            groupid: null,
             action: null
         },
         views: {
@@ -57,9 +52,6 @@ angular.module('mm.addons.mod_wiki', [])
             pageid: null,
             pagetitle: null,
             subwikiid: null,
-            wikiid: null,
-            userid: null,
-            groupid: null,
             section: null
         },
         views: {
@@ -74,16 +66,11 @@ angular.module('mm.addons.mod_wiki', [])
 
 .config(function($mmCourseDelegateProvider, $mmContentLinksDelegateProvider, $mmCoursePrefetchDelegateProvider) {
     $mmCourseDelegateProvider.registerContentHandler('mmaModWiki', 'wiki', '$mmaModWikiHandlers.courseContent');
+    $mmContentLinksDelegateProvider.registerLinkHandler('mmaModWiki', '$mmaModWikiHandlers.linksHandler');
     $mmCoursePrefetchDelegateProvider.registerPrefetchHandler('mmaModWiki', 'wiki', '$mmaModWikiPrefetchHandler');
-    $mmContentLinksDelegateProvider.registerLinkHandler('mmaModWiki:index', '$mmaModWikiHandlers.indexLinksHandler');
-    $mmContentLinksDelegateProvider.registerLinkHandler('mmaModWiki:pagemap', '$mmaModWikiHandlers.pageMapLinksHandler');
-    $mmContentLinksDelegateProvider.registerLinkHandler('mmaModWiki:create', '$mmaModWikiHandlers.createLinksHandler');
-    $mmContentLinksDelegateProvider.registerLinkHandler('mmaModWiki:edit', '$mmaModWikiHandlers.editLinksHandler');
 })
 
-.run(function($mmEvents, mmCoreEventLogout, $mmaModWiki, $mmCronDelegate) {
+.run(function($mmEvents, mmCoreEventLogout, $mmaModWiki) {
     // Clear cache for SubwikiLists
     $mmEvents.on(mmCoreEventLogout, $mmaModWiki.clearSubwikiList);
-    // Register sync handler.
-    $mmCronDelegate.register('mmaModWiki', '$mmaModWikiHandlers.syncHandler');
 });

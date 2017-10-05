@@ -14,25 +14,17 @@
 
 angular.module('mm.addons.messages', ['mm.core'])
 
-.constant('mmaMessagesComponent', 'mmaMessages')
-.constant('mmaMessagesLimitMessages', 50)
 .constant('mmaMessagesDiscussionLoadedEvent', 'mma_messages_discussion_loaded')
 .constant('mmaMessagesDiscussionLeftEvent', 'mma_messages_discussion_left')
-.constant('mmaMessagesPollInterval', 10000)
+.constant('mmaMessagesPollInterval', 5000)
 .constant('mmaMessagesPriority', 600)
 .constant('mmaMessagesSendMessagePriority', 1000)
 .constant('mmaMessagesAddContactPriority', 800)
 .constant('mmaMessagesBlockContactPriority', 600)
-.constant('mmaMessagesPreferencesPriority', 600)
 .constant('mmaMessagesNewMessageEvent', 'mma-messages_new_message')
-.constant('mmaMessagesReadChangedEvent', 'mma-messages_read_changed')
-.constant('mmaMessagesReadCronEvent', 'mma-messages_read_cron')
-.constant('mmaMessagesAutomSyncedEvent', 'mma_messages_autom_synced')
-.constant('mmaMessagesLimitSearchMessages', 50)
 
 .config(function($stateProvider, $mmUserDelegateProvider, $mmSideMenuDelegateProvider, mmaMessagesSendMessagePriority,
-            mmaMessagesAddContactPriority, mmaMessagesBlockContactPriority, mmaMessagesPriority, $mmContentLinksDelegateProvider,
-            $mmSettingsDelegateProvider, mmaMessagesPreferencesPriority) {
+            mmaMessagesAddContactPriority, mmaMessagesBlockContactPriority, mmaMessagesPriority, $mmContentLinksDelegateProvider) {
 
     $stateProvider
 
@@ -40,7 +32,8 @@ angular.module('mm.addons.messages', ['mm.core'])
         url: '/messages',
         views: {
             'site': {
-                templateUrl: 'addons/messages/templates/index.html'
+                templateUrl: 'addons/messages/templates/index.html',
+                controller: 'mmaMessagesIndexCtrl'
             }
         }
     })
@@ -48,23 +41,12 @@ angular.module('mm.addons.messages', ['mm.core'])
     .state('site.messages-discussion', {
         url: '/messages-discussion',
         params: {
-            userId: null,
-            showKeyboard: false,
+            userId: null
         },
         views: {
             'site': {
                 templateUrl: 'addons/messages/templates/discussion.html',
                 controller: 'mmaMessagesDiscussionCtrl'
-            }
-        }
-    })
-
-    .state('site.messages-preferences', {
-        url: '/messages-preferences',
-        views: {
-            'site': {
-                controller: 'mmaMessagesPreferencesCtrl',
-                templateUrl: 'addons/messages/templates/preferences.html'
             }
         }
     });
@@ -78,16 +60,10 @@ angular.module('mm.addons.messages', ['mm.core'])
     $mmUserDelegateProvider.registerProfileHandler('mmaMessages:blockContact', '$mmaMessagesHandlers.blockContact', mmaMessagesBlockContactPriority);
 
     // Register content links handler.
-    $mmContentLinksDelegateProvider.registerLinkHandler('mmaMessages:index', '$mmaMessagesHandlers.indexLinksHandler');
-    $mmContentLinksDelegateProvider.registerLinkHandler('mmaMessages:discussion', '$mmaMessagesHandlers.discussionLinksHandler');
-
-    // Register settings handler.
-    $mmSettingsDelegateProvider.registerHandler('mmaMessages:preferences',
-            '$mmaMessagesHandlers.preferences', mmaMessagesPreferencesPriority);
+    $mmContentLinksDelegateProvider.registerLinkHandler('mmaMessages', '$mmaMessagesHandlers.linksHandler');
 })
 
-.run(function($mmaMessages, $mmEvents, $state, $mmAddonManager, $mmUtil, mmCoreEventLogin, $mmCronDelegate, $mmaMessagesSync,
-            mmCoreEventOnlineStatusChanged, $mmSitesManager) {
+.run(function($mmaMessages, $mmEvents, $state, $mmAddonManager, $mmUtil, mmCoreEventLogin) {
 
     // Invalidate messaging enabled WS calls.
     $mmEvents.on(mmCoreEventLogin, function() {
@@ -100,15 +76,8 @@ angular.module('mm.addons.messages', ['mm.core'])
         $mmPushNotificationsDelegate.registerHandler('mmaMessages', function(notification) {
             if ($mmUtil.isFalseOrZero(notification.notif)) {
                 $mmaMessages.isMessagingEnabledForSite(notification.site).then(function() {
-                    $mmSitesManager.isFeatureDisabled('$mmSideMenuDelegate_mmaMessages', notification.site).then(function(disabled) {
-                        if (disabled) {
-                            // Messages are disabled, stop.
-                            return;
-                        }
-
-                        $mmaMessages.invalidateDiscussionsCache().finally(function() {
-                            $state.go('redirect', {siteid: notification.site, state: 'site.messages'});
-                        });
+                    $mmaMessages.invalidateDiscussionsCache().finally(function() {
+                        $state.go('redirect', {siteid: notification.site, state: 'site.messages'});
                     });
                 });
                 return true;
@@ -116,14 +85,4 @@ angular.module('mm.addons.messages', ['mm.core'])
         });
     }
 
-    // Register sync process.
-    $mmCronDelegate.register('mmaMessagesSync', '$mmaMessagesHandlers.syncHandler');
-    $mmCronDelegate.register('mmaMessagesMenu', '$mmaMessagesHandlers.sideMenuNav');
-
-    // Sync some discussions when device goes online.
-    $mmEvents.on(mmCoreEventOnlineStatusChanged, function(online) {
-        if (online) {
-            $mmaMessagesSync.syncAllDiscussions(undefined, true);
-        }
-    });
 });

@@ -8,6 +8,5 @@
     "personalnotes": "Anotações pessoais",
     "publishstate": "Contexto",
     "sitenotes": "Anotações do site",
-    "userwithid": "Utilizador com o ID {{id}}",
-    "warningnotenotsent": "Não foi possível adicionar anotações à disciplina {{course}}. {{error}}"
+    "userwithid": "Utilizador com o ID {{id}}"
 }

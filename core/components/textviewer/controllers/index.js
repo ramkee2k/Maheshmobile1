@@ -21,19 +21,12 @@ angular.module('mm.core.textviewer')
  * @ngdoc controller
  * @name mmTextViewerIndexCtrl
  */
-.controller('mmTextViewerIndexCtrl', function($stateParams, $scope, $mmText) {
+.controller('mmTextViewerIndexCtrl', function($stateParams, $scope) {
     $scope.title = $stateParams.title;
 
     if ($stateParams.replacelinebreaks) {
-        $scope.content = $mmText.replaceNewLines($stateParams.content, '<br>');
+        $scope.content = $stateParams.content.replace(/(?:\r\n|\r|\n)/g, '<br />');
     } else {
         $scope.content = $stateParams.content;
-    }
-
-    if ($stateParams.component) {
-        $scope.component = $stateParams.component;
-        if ($stateParams.componentId) {
-            $scope.componentId = $stateParams.componentId;
-        }
     }
 });

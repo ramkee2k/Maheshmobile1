@@ -37,13 +37,13 @@ angular.module('mm.addons.mod_quiz')
 
     $scope.isReview = true;
     $scope.component = mmaModQuizComponent;
+    $scope.componentId = quizId;
     $scope.showAll = currentPage == -1;
 
     // Convenience function to get the quiz data.
     function fetchData() {
         return $mmaModQuiz.getQuizById(courseId, quizId).then(function(quizData) {
             quiz = quizData;
-            $scope.componentId = quiz.coursemodule;
 
             return $mmaModQuiz.getCombinedReviewOptions(quiz.id).then(function(result) {
                 options = result;
@@ -111,10 +111,14 @@ angular.module('mm.addons.mod_quiz')
             timeTaken = attempt.timefinish - attempt.timestart;
             if (timeTaken) {
                 // Format timeTaken.
-                attempt.timeTaken = $mmUtil.formatTimeInstant(timeTaken);
+                $mmUtil.formatTime(timeTaken).then(function(takenTime) {
+                    attempt.timeTaken = takenTime;
+                });
                 // Calculate overdue time.
                 if (quiz.timelimit && timeTaken > quiz.timelimit + 60) {
-                    attempt.overTime = $mmUtil.formatTimeInstant(timeTaken - quiz.timelimit);
+                    $mmUtil.formatTime(timeTaken - quiz.timelimit).then(function(overTime) {
+                        attempt.overTime = overTime;
+                    });
                 }
             }
 

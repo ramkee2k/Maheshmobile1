@@ -21,9 +21,9 @@ angular.module('mm.addons.mod_assign')
  * @ngdoc service
  * @name $mmaModAssignHandlers
  */
-.factory('$mmaModAssignHandlers', function($mmCourse, $mmaModAssign, $state, $mmContentLinksHelper, $mmUtil, mmCoreDownloading,
+.factory('$mmaModAssignHandlers', function($mmCourse, $mmaModAssign, $state, $q, $mmContentLinksHelper, $mmUtil, mmCoreDownloading,
         mmCoreNotDownloaded, mmCoreOutdated, $mmEvents, mmCoreEventPackageStatusChanged, $mmSite, mmaModAssignComponent,
-        $mmCoursePrefetchDelegate, $mmaModAssignPrefetchHandler, $mmaModAssignSync) {
+        $mmCoursePrefetchDelegate, $mmaModAssignPrefetchHandler) {
     var self = {};
 
     /**
@@ -157,60 +157,58 @@ angular.module('mm.addons.mod_assign')
      * @ngdoc method
      * @name $mmaModAssignHandlers#linksHandler
      */
-    self.linksHandler = $mmContentLinksHelper.createModuleIndexLinkHandler('mmaModAssign', 'assign', $mmaModAssign);
-
-    /**
-     * Synchronization handler.
-     *
-     * @module mm.addons.mod_assign
-     * @ngdoc method
-     * @name $mmaModAssignHandlers#syncHandler
-     */
-    self.syncHandler = function() {
+    self.linksHandler = function() {
 
         var self = {};
 
         /**
-         * Execute the process.
-         * Receives the ID of the site affected, undefined for all sites.
+         * Whether or not the handler is enabled for a certain site.
          *
-         * @param  {String} [siteId] ID of the site affected, undefined for all sites.
-         * @return {Promise}         Promise resolved when done, rejected if failure.
+         * @param  {String} siteId     Site ID.
+         * @param  {Number} [courseId] Course ID related to the URL.
+         * @return {Promise}           Promise resolved with true if enabled.
          */
-        self.execute = function(siteId) {
-            return $mmaModAssignSync.syncAllAssignments(siteId);
+        function isEnabled(siteId, courseId) {
+            return $mmaModAssign.isPluginEnabled(siteId).then(function(enabled) {
+                if (!enabled) {
+                    return false;
+                }
+                return courseId || $mmCourse.canGetModuleWithoutCourseId(siteId);
+            });
+        }
+
+        /**
+         * Get actions to perform with the link.
+         *
+         * @param {String[]} siteIds  Site IDs the URL belongs to.
+         * @param {String} url        URL to treat.
+         * @param {Number} [courseId] Course ID related to the URL.
+         * @return {Promise}          Promise resolved with the list of actions.
+         *                            See {@link $mmContentLinksDelegate#registerLinkHandler}.
+         */
+        self.getActions = function(siteIds, url, courseId) {
+            // Check it's an assign URL.
+            if (typeof self.handles(url) != 'undefined') {
+                return $mmContentLinksHelper.treatModuleIndexUrl(siteIds, url, isEnabled, courseId);
+            }
+            return $q.when([]);
         };
 
         /**
-         * Get the time between consecutive executions.
+         * Check if the URL is handled by this handler. If so, returns the URL of the site.
          *
-         * @return {Number} Time between consecutive executions (in ms).
+         * @param  {String} url URL to check.
+         * @return {String}     Site URL. Undefined if the URL doesn't belong to this handler.
          */
-        self.getInterval = function() {
-            return 600000; // 10 minutes.
-        };
-
-        /**
-         * Whether it's a synchronization process or not.
-         *
-         * @return {Boolean} True if is a sync process, false otherwise.
-         */
-        self.isSync = function() {
-            return true;
-        };
-
-        /**
-         * Whether the process uses network or not.
-         *
-         * @return {Boolean} True if uses network, false otherwise.
-         */
-        self.usesNetwork = function() {
-            return true;
+        self.handles = function(url) {
+            var position = url.indexOf('/mod/assign/view.php');
+            if (position > -1) {
+                return url.substr(0, position);
+            }
         };
 
         return self;
     };
-
 
     return self;
 });

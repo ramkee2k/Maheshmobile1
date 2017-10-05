@@ -15,7 +15,6 @@
 angular.module('mm.addons.mod_chat', [])
 
 .constant('mmaChatPollInterval', 4000)
-.constant('mmaModChatComponent', 'mmaModChat')
 
 .config(function($stateProvider) {
 

@@ -22,27 +22,23 @@ angular.module('mm.addons.mod_wiki')
  * @name mmaModWikiEditCtrl
  */
 .controller('mmaModWikiEditCtrl', function($q, $scope, $stateParams, $mmUtil, $state, $mmaModWiki, $translate, $ionicHistory,
-        $mmCourse, mmaModWikiRenewLockTimeout, $interval, $mmText, $mmaModWikiOffline, $mmEvents, $mmLang, $mmSite,
-        mmaModWikiComponent, mmaModWikiPageCreatedEvent, $mmaModWikiSync, $mmSyncBlock) {
+        $mmCourse, $ionicPlatform, $rootScope, mmaModWikiRenewLockTimeout, $interval, $mmText, mmaModWikiComponent) {
     var module = $stateParams.module || {},
         courseId = $stateParams.courseid,
         subwikiId = $stateParams.subwikiid || null,
-        wikiId = $stateParams.wikiid || null,
+        wikiId = null,
         pageId = $stateParams.pageid || null,
         section = $stateParams.section || null,
+        originalBackFunction = $rootScope.$ionicGoBack,
+        unregisterHardwareBack,
         originalContent = null,
         editing = false,
         version = false,
-        groupId = $stateParams.groupid || null,
-        userId = $stateParams.userid || null,
+        groupId,
+        userId,
         rteEnabled,
         subwikiFiles,
-        renewLockInterval,
-        editOffline = false,
-        blockId = $mmaModWikiSync.subwikiBlockId(subwikiId, wikiId, userId, groupId);
-
-    // Block leaving the view, we want to show a confirm to the user if there's unsaved data.
-    $mmUtil.blockLeaveView($scope, cancel);
+        renewLockInterval;
 
     $scope.saveAndGoParams = false; // See $ionicView.afterLeave.
     $scope.component = mmaModWikiComponent;
@@ -58,11 +54,6 @@ angular.module('mm.addons.mod_wiki')
     $scope.title = $scope.page.title ? $translate.instant('mma.mod_wiki.editingpage', {'$a': $scope.page.title}) :
         $translate.instant('mma.mod_wiki.newpagehdr');
 
-    if (blockId) {
-        // Block the subwiki ASAP.
-        $mmSyncBlock.blockOperation(mmaModWikiComponent, blockId);
-    }
-
     $scope.save = function() {
         var text = $scope.page.text,
             promise,
@@ -70,8 +61,6 @@ angular.module('mm.addons.mod_wiki')
 
         if (rteEnabled) {
             text = $mmText.restorePluginfileUrls(text, subwikiFiles);
-        } else {
-            text = $mmText.formatHtmlLines(text);
         }
 
         if (editing) {
@@ -86,62 +75,28 @@ angular.module('mm.addons.mod_wiki')
                 return $mmUtil.showModal('mm.core.notice', 'mma.mod_wiki.titleshouldnotbeempty');
             }
 
-            if (!editOffline) {
-                // Check if the user has an offline page with the same title.
-                promise = $mmaModWikiOffline.getNewPage($scope.page.title, subwikiId, wikiId, userId, groupId).then(function() {
-                    // There's a page with same name, reject with error message.
-                    return $mmLang.translateAndReject('mma.mod_wiki.pageexists');
-                }, function() {
-                    // Not found, page can be sent.
-                });
-            } else {
-                promise = $q.when();
-            }
+            promise = $mmaModWiki.newPage(subwikiId, $scope.page.title, text).then(function(createdId) {
+                pageId = createdId;
 
-            promise = promise.then(function() {
-                // Try to send the page.
-                var wikiId = wikiId || (module && module.instance);
-                return $mmaModWiki.newPage($scope.page.title, text, subwikiId, wikiId, userId, groupId).then(function(createdId) {
-                    if (createdId) {
-                        // Page was created, get its data and go to the page.
-                        pageId = createdId;
-
-                        return $mmaModWiki.getPageContents(pageId).then(function(pageContents) {
-                            var promises = [];
-                            wikiId = parseInt(pageContents.wikiid, 10);
-                            if (!subwikiId) {
-                                // Subwiki was not created, invalidate subwikis as well.
-                                promises.push($mmaModWiki.invalidateSubwikis(wikiId));
-                            }
-
-                            subwikiId = parseInt(pageContents.subwikiid, 10);
-                            userId = parseInt(pageContents.userid, 10);
-                            groupId = parseInt(pageContents.groupid, 10);
-                            // Invalidate subwiki pages since there are new.
-                            promises.push($mmaModWiki.invalidateSubwikiPages(wikiId));
-
-                            return $q.all(promises).then(function() {
-                                return gotoPage();
-                            });
-                        }).finally(function() {
-                            // Notify page created.
-                            $mmEvents.trigger(mmaModWikiPageCreatedEvent, {
-                                pageid: pageId,
-                                subwikiid: subwikiId,
-                                pagetitle: $scope.page.title,
-                                siteid: $mmSite.getId()
-                            });
-                        });
-                    } else {
-                        // Page stored in offline. Go to see the offline page.
-                        return gotoNewOfflinePage();
-                    }
+                return $mmaModWiki.getPageContents(pageId).then(function(pageContents) {
+                    wikiId = pageContents.wikiid;
+                    subwikiId = pageContents.subwikiid;
+                    // Invalidate subwiki pages since there are new.
+                    return $mmaModWiki.invalidateSubwikiPages(pageContents.wikiid).then(function() {
+                        return gotoPage();
+                    });
                 });
             });
         }
 
         return promise.catch(function(message) {
-            $mmUtil.showErrorModalDefault(message, 'Error saving wiki data.');
+            if (message) {
+                $mmUtil.showErrorModal(message);
+            } else {
+                $mmUtil.showErrorModal('Error saving wiki data.');
+            }
+
+            return $ionicHistory.goBack();
         }).finally(function() {
             modal.dismiss();
         });
@@ -149,31 +104,28 @@ angular.module('mm.addons.mod_wiki')
 
     // Just ask to confirm the lost of data.
     function cancel() {
-        if ((originalContent == $scope.page.text) || (!editing && !$scope.page.text && !$scope.page.title)) {
-            return $q.when();
+        var promise;
+
+        if ((editing && originalContent == $scope.page.text) || (!editing && !$scope.page.text && !$scope.page.title)) {
+            promise = $q.when();
         } else {
             // Show confirmation if some data has been modified.
-            return $mmUtil.showConfirm($translate('mm.core.confirmcanceledit'));
+            promise = $mmUtil.showConfirm($translate('mm.core.confirmcanceledit'));
         }
+
+        return promise.then(function() {
+            return $ionicHistory.goBack();
+        });
     }
 
     // Check if we need to navigate to a new state.
     function gotoPage() {
         return retrieveModuleInfo(wikiId).then(function() {
-            var openPage = false;
+            var backView = $ionicHistory.backView();
 
-            // Not the firstpage.
-            if ($stateParams.subwikiid) {
-                if (!editing && editOffline && backViewPageIsDifferentOffline()) {
-                    // The user submitted an offline page that isn't loaded in the back view, open it.
-                    openPage = true;
-                } else if (!editOffline && backViewIsDifferentPageOnline()) {
-                    // The user submitted an offline page that isn't loaded in the back view, open it.
-                    openPage = true;
-                }
-            }
-
-            if (openPage) {
+            // We cannot precissely detect when the state is the same but this is close to it.
+            if (!editing || backView.stateName != 'site.mod_wiki' || backView.stateParams.moduleid != module.id ||
+                    backView.stateParams.pageid != pageId) {
                 // Setting that will do the app navigate to the page.
                 $scope.saveAndGoParams = {
                     module: module,
@@ -182,75 +134,20 @@ angular.module('mm.addons.mod_wiki')
                     pageid: pageId,
                     pagetitle: $scope.page.title,
                     wikiid: wikiId,
-                    subwikiid: subwikiId,
-                    userid: userId,
-                    groupid: groupId
+                    subwikiid: subwikiId
                 };
             }
 
             return $ionicHistory.goBack();
         }).catch(function() {
-            // Go back if fails.
+            //Go back if fails.
             return $ionicHistory.goBack();
         });
     }
 
-    // Navigate to a new offline page.
-    function gotoNewOfflinePage() {
-        if (courseId && (module.id || wikiId)) {
-            // We have enough data to navigate to the page.
-            if (!editOffline || backViewPageIsDifferentOffline()) {
-                $scope.saveAndGoParams = {
-                    module: module,
-                    moduleid: module.id,
-                    courseid: courseId,
-                    pageid: null,
-                    pagetitle: $scope.page.title,
-                    wikiid: wikiId,
-                    subwikiid: subwikiId,
-                    userid: userId,
-                    groupid: groupId
-                };
-            }
-        } else {
-            $mmUtil.showModal('mm.core.success', 'mm.core.datastoredoffline');
-        }
-
-        return $ionicHistory.goBack();
-    }
-
-    // In case we are NOT editing an offline page, check if the page loaded in back view is different than this view.
-    function backViewIsDifferentPageOnline() {
-        // We cannot precisely detect when the state is the same but this is close to it.
-        var backView = $ionicHistory.backView();
-        return !editing || backView.stateName != 'site.mod_wiki' || backView.stateParams.moduleid != module.id ||
-                    backView.stateParams.pageid != pageId;
-    }
-
-    // In case we're editing an offline page, check if the page loaded in back view is different than this view.
-    function backViewPageIsDifferentOffline() {
-        // We cannot precisely detect when the state is the same but this is close to it.
-        var backView = $ionicHistory.backView(),
-            backViewParams = backView.stateParams;
-        if (backView.stateName != 'site.mod_wiki' || backViewParams.moduleid != module.id || backViewParams.wikiid != wikiId ||
-                backViewParams.pagetitle != $scope.page.title) {
-            return true;
-        }
-
-        // Check subwiki using subwiki or user and group.
-        var backSubwikiId = parseInt(backViewParams.subwikiid, 10) || 0;
-        if (backSubwikiId > 0 && subwikiId > 0) {
-            return backSubwikiId != subwikiId;
-        }
-
-        var backUserId = parseInt(backViewParams.userid, 10) || 0,
-            backGroupId = parseInt(backViewParams.groupid, 10) || 0;
-        return userId != backUserId || groupId != backGroupId;
-    }
-
     // Renew lock and control versions.
     function renewLock() {
-        $mmaModWiki.getPageForEditing(pageId, section, true).then(function(response) {
+        $mmaModWiki.getPageForEditing(pageId, section).then(function(response) {
             if (response.version && version != response.version) {
                 $scope.wrongVersionLock = true;
             }
@@ -265,8 +162,6 @@ angular.module('mm.addons.mod_wiki')
             if (pageId) {
                 $scope.canEditTitle = false;
                 editing = true;
-                editOffline = false;
-
                 // Get page contents to obtain title and editing permission
                 promise = $mmaModWiki.getPageContents(pageId).then(function(pageContents) {
                     $scope.page.title = pageContents.title;
@@ -277,9 +172,6 @@ angular.module('mm.addons.mod_wiki')
                     groupId = pageContents.groupid;
                     userId = pageContents.userid;
 
-                    // Wait for sync to be over (if any).
-                    return $mmaModWikiSync.waitForSync(blockId);
-                }).then(function() {
                     // Check if rich text editor is enabled.
                     return $mmUtil.isRichTextEditorEnabled();
                 }).then(function(enabled) {
@@ -312,31 +204,11 @@ angular.module('mm.addons.mod_wiki')
                     $scope.wikiLoaded = true;
                 });
             } else {
-                // New page. Wait for sync to be over (if any).
-                promise = $mmaModWikiSync.waitForSync(blockId);
-
-                if ($scope.page.title) {
-                    // Check if there's already some offline data for this page.
-                    promise = promise.then(function() {
-                        return $mmaModWikiOffline.getNewPage($scope.page.title, subwikiId, wikiId, userId, groupId);
-                    }).then(function(page) {
-                        // Load offline content.
-                        $scope.page.text = page.cachedcontent;
-                        originalContent = $scope.page.text;
-                        editOffline = true;
-                    }).catch(function() {
-                        // No offline data found.
-                        editOffline = false;
-                    });
-                } else {
-                    editOffline = false;
-                }
-
-                promise.then(function() {
-                    $scope.wikiLoaded = true;
-                    editing = false;
-                    canEdit = !!blockId; // If no blockId, the user cannot edit the page.
-                });
+                // New page
+                $scope.wikiLoaded = true;
+                editing = false;
+                canEdit = !!subwikiId; // If no subwikiId is received, the user cannot edit the page.
+                promise = $q.when();
             }
         } else {
             promise = $q.when();
@@ -344,7 +216,11 @@ angular.module('mm.addons.mod_wiki')
         }
 
         return promise.catch(function(message) {
-            $mmUtil.showErrorModalDefault(message, 'Error getting wiki data.');
+            if (message) {
+                $mmUtil.showErrorModal(message);
+            } else {
+                $mmUtil.showErrorModal('Error getting wiki data.');
+            }
 
             return $ionicHistory.goBack();
         }).finally(function() {
@@ -393,25 +269,21 @@ angular.module('mm.addons.mod_wiki')
         }
     });
 
-    fetchWikiPageData().then(function() {
-        if (blockId && !$scope.$$destroyed) {
-            // Block the subwiki now that we have blockId for sure.
-            var newBlockId = $mmaModWikiSync.subwikiBlockId(subwikiId, wikiId, userId, groupId);
-            if (newBlockId != blockId) {
-                $mmSyncBlock.unblockOperation(mmaModWikiComponent, blockId);
-                blockId = newBlockId;
-                $mmSyncBlock.blockOperation(mmaModWikiComponent, blockId);
-            }
-        }
-    }).finally(function() {
+    // Override Ionic's back button behavior.
+    $rootScope.$ionicGoBack = cancel;
+
+    // Override Android's back button. We set a priority of 101 to override the "Return to previous view" action.
+    unregisterHardwareBack = $ionicPlatform.registerBackButtonAction(cancel, 101);
+
+    fetchWikiPageData().finally(function() {
         $scope.wikiLoaded = true;
     });
 
 
     $scope.$on('$destroy', function() {
+        // Restore original back functions.
+        unregisterHardwareBack();
+        $rootScope.$ionicGoBack = originalBackFunction;
         $interval.cancel(renewLockInterval);
-        if (blockId) {
-            $mmSyncBlock.unblockOperation(mmaModWikiComponent, blockId);
-        }
     });
 });

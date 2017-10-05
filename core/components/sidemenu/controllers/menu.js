@@ -22,12 +22,12 @@ angular.module('mm.core.sidemenu')
  * @name mmSideMenuCtrl
  */
 .controller('mmSideMenuCtrl', function($scope, $state, $mmSideMenuDelegate, $mmSitesManager, $mmSite, $mmEvents,
-            $timeout, mmCoreEventLanguageChanged, mmCoreEventSiteUpdated, $mmSideMenu, $mmCourses) {
+            $timeout, mmCoreEventLanguageChanged, mmCoreEventSiteUpdated, $mmSideMenu) {
 
     $mmSideMenu.setScope($scope);
     $scope.handlers = $mmSideMenuDelegate.getNavHandlers();
     $scope.areNavHandlersLoaded = $mmSideMenuDelegate.areNavHandlersLoaded;
-    loadSiteInfo();
+    $scope.siteinfo = $mmSite.getInfo();
 
     $scope.logout = function() {
         $mmSitesManager.logout().finally(function() {
@@ -35,28 +35,20 @@ angular.module('mm.core.sidemenu')
         });
     };
 
-    function loadSiteInfo() {
-        var config = $mmSite.getStoredConfig();
-
-        $scope.siteinfo = $mmSite.getInfo();
-        $scope.logoutLabel = 'mm.sidemenu.' + (config && config.tool_mobile_forcelogout == "1" ? 'logout': 'changesite');
-        $scope.showWeb = !$mmSite.isFeatureDisabled('$mmSideMenuDelegate_website');
-        $scope.showHelp = !$mmSite.isFeatureDisabled('$mmSideMenuDelegate_help');
-
-        $mmSite.getDocsUrl().then(function(docsurl) {
-            $scope.docsurl = docsurl;
-        });
-
-        $mmSideMenu.getCustomMenuItems().then(function(items) {
-            $scope.customItems = items;
-        });
-    }
+    $mmSite.getDocsUrl().then(function(docsurl) {
+        $scope.docsurl = docsurl;
+    });
 
     function updateSiteInfo() {
         // We need to use $timeout to force a $digest and make $watch notice the variable change.
         $scope.siteinfo = undefined;
         $timeout(function() {
-            loadSiteInfo();
+            $scope.siteinfo = $mmSite.getInfo();
+
+            // Update docs URL, maybe the Moodle release has changed.
+            $mmSite.getDocsUrl().then(function(docsurl) {
+                $scope.docsurl = docsurl;
+            });
         });
     }
 

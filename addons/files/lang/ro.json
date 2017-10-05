@@ -3,10 +3,10 @@
     "clicktoupload": "Apăsați butonul de mai jos pentru a încarcă fișierele în contul dumneavoastră.",
     "couldnotloadfiles": "Lista fișierelor nu a putut fi încărcată.",
     "emptyfilelist": "Nu sunt fișiere disponibile.",
-    "files": "Fişiere",
+    "myfiles": "Fișierele mele",
+    "myprivatefiles": "Fisiere personale",
     "myprivatefilesdesc": "Fișierele disponibile din zona personală, pe care o dețineți pe acest site.",
-    "privatefiles": "Fișiere private",
-    "sitefiles": "Fişiere site",
+    "sitefiles": "Fișierele disponibile pe site",
     "sitefilesdesc": "Alte fișiere disponibile pe acest site.",
-    "uploadfiles": "Trimite fișiere de feedback"
+    "uploadfiles": "Încărcați mai multe fișiere"
 }

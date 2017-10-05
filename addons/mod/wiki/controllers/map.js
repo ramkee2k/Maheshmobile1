@@ -29,19 +29,12 @@ angular.module('mm.addons.mod_wiki')
             letter = {};
 
         $scope.map = [];
-        subwikiPages = subwikiPages.sort(function(a, b) {
-            var compareA = a.title.toLowerCase().trim(),
-                compareB = b.title.toLowerCase().trim();
-
-            return compareA.localeCompare(compareB);
-        });
 
         angular.forEach(subwikiPages, function(page) {
-            var letterCandidate = page.title.charAt(0).toLocaleUpperCase();
             // Should we create a new grouping?
-            if (letterCandidate !== initialLetter) {
-                initialLetter = letterCandidate;
-                letter = {label: letterCandidate, pages: []};
+            if (page.title.charAt(0).toLocaleUpperCase() !== initialLetter) {
+                initialLetter = page.title.charAt(0).toLocaleUpperCase();
+                letter = {label: initialLetter, pages: []};
 
                 $scope.map.push(letter);
             }

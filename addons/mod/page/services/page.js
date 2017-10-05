@@ -21,11 +21,103 @@ angular.module('mm.addons.mod_page')
  * @ngdoc service
  * @name $mmaModPage
  */
-.factory('$mmaModPage', function($mmFilepool, $mmSite, $mmFS, $http, $log, $q, $mmSitesManager, $mmUtil, $mmText, $mmCourse,
-            mmaModPageComponent) {
+.factory('$mmaModPage', function($mmFilepool, $mmSite, $mmFS, $http, $log, $q, $mmSitesManager, $mmUtil, mmaModPageComponent) {
     $log = $log.getInstance('$mmaModPage');
 
     var self = {};
+
+    /**
+     * Download all the content.
+     *
+     * @module mm.addons.mod_page
+     * @ngdoc method
+     * @name $mmaModPage#downloadAllContent
+     * @param {Object} module The module object.
+     * @return {Promise}      Promise resolved when all content is downloaded. Data returned is not reliable.
+     */
+    self.downloadAllContent = function(module) {
+        var files = self.getDownloadableFiles(module),
+            revision = $mmFilepool.getRevisionFromFileList(module.contents),
+            timemod = $mmFilepool.getTimemodifiedFromFileList(module.contents);
+        return $mmFilepool.downloadPackage($mmSite.getId(), files, mmaModPageComponent, module.id, revision, timemod);
+    };
+
+    /**
+     * Returns a list of files that can be downloaded.
+     *
+     * @module mm.addons.mod_page
+     * @ngdoc method
+     * @name $mmaModPage#getDownloadableFiles
+     * @param {Object} module The module object returned by WS.
+     * @return {Object[]}     List of files.
+     */
+    self.getDownloadableFiles = function(module) {
+        var files = [];
+
+        angular.forEach(module.contents, function(content) {
+            if (self.isFileDownloadable(content)) {
+                files.push(content);
+            }
+        });
+
+        return files;
+    };
+
+    /**
+     * Get event names of files being downloaded.
+     *
+     * @module mm.addons.mod_page
+     * @ngdoc method
+     * @name $mmaModPage#getDownloadingFilesEventNames
+     * @param {Object} module The module object returned by WS.
+     * @return {Promise} Resolved with an array of event names.
+     */
+    self.getDownloadingFilesEventNames = function(module) {
+        var promises = [],
+            eventNames = [],
+            siteid = $mmSite.getId();
+
+        angular.forEach(module.contents, function(content) {
+            var url = content.fileurl;
+            if (!self.isFileDownloadable(content)) {
+                return;
+            }
+            promises.push($mmFilepool.isFileDownloadingByUrl(siteid, url).then(function() {
+                return $mmFilepool.getFileEventNameByUrl(siteid, url).then(function(eventName) {
+                    eventNames.push(eventName);
+                });
+            }, function() {
+                // Ignore fails.
+            }));
+        });
+
+        return $q.all(promises).then(function() {
+            return eventNames;
+        });
+    };
+
+    /**
+     * Returns a list of file event names.
+     *
+     * @module mm.addons.mod_page
+     * @ngdoc method
+     * @name $mmaModPage#getFileEventNames
+     * @param {Object} module The module object returned by WS.
+     * @return {Promise} Promise resolved with array of $mmEvent names.
+     */
+    self.getFileEventNames = function(module) {
+        var promises = [];
+        angular.forEach(module.contents, function(content) {
+            var url = content.fileurl;
+            if (!self.isFileDownloadable(content)) {
+                return;
+            }
+            promises.push($mmFilepool.getFileEventNameByUrl($mmSite.getId(), url));
+        });
+        return $q.all(promises).then(function(eventNames) {
+            return eventNames;
+        });
+    };
 
     /**
      * Gets the page HTML.
@@ -34,7 +126,7 @@ angular.module('mm.addons.mod_page')
      * @ngdoc method
      * @name $mmaModPage#getPageHtml
      * @param {Object} contents The module contents.
-     * @param {Number} moduleId The module ID.
+     * @param {Object} moduleId The module ID.
      * @return {Promise}
      */
     self.getPageHtml = function(contents, moduleId) {
@@ -56,12 +148,13 @@ angular.module('mm.addons.mod_page')
                     // Add the folders without the leading slash.
                     key = content.filepath.substr(1) + key;
                 }
-                paths[$mmText.decodeURIComponent(key)] = url;
+                paths[decodeURIComponent(key)] = url;
             }
         });
 
         // Promise handling when we are in a browser.
         promise = (function() {
+            var deferred;
             if (!indexUrl) {
                 // If ever that happens.
                 $log.debug('Could not locate the index page');
@@ -87,6 +180,32 @@ angular.module('mm.addons.mod_page')
                 }
             });
         });
+    };
+
+    /**
+     * Invalidate the prefetched content.
+     *
+     * @module mm.addons.mod_page
+     * @ngdoc method
+     * @name $mmaModPage#invalidateContent
+     * @param {Object} moduleId The module ID.
+     * @return {Promise}
+     */
+    self.invalidateContent = function(moduleId) {
+        return $mmFilepool.invalidateFilesByComponent($mmSite.getId(), mmaModPageComponent, moduleId);
+    };
+
+    /**
+     * Check if a file is downloadable. The file param must have a 'type' attribute like in core_course_get_contents response.
+     *
+     * @module mm.addons.mod_page
+     * @ngdoc method
+     * @name $mmaModPage#isFileDownloadable
+     * @param {Object} file File to check.
+     * @return {Boolean}    True if downloadable, false otherwise.
+     */
+    self.isFileDownloadable = function(file) {
+        return file.type === 'file';
     };
 
     /**
@@ -118,123 +237,11 @@ angular.module('mm.addons.mod_page')
      * @return {Promise}         Promise resolved with true if plugin is enabled, rejected or resolved with false otherwise.
      */
     self.isPluginEnabled = function(siteId) {
+        siteId = siteId || $mmSite.getId();
+
         return $mmSitesManager.getSite(siteId).then(function(site) {
             return site.canDownloadFiles();
         });
-    };
-
-    /**
-     * Returns whether or not getPage WS available or not.
-     *
-     * @module mm.addons.mod_page
-     * @ngdoc method
-     * @name $mmaModPage#isGetPageWSAvailable
-     * @return {Boolean}
-     */
-    self.isGetPageWSAvailable = function() {
-        return $mmSite.wsAvailable('mod_page_get_pages_by_courses');
-    };
-
-    /**
-     * Get a page data.
-     *
-     * @module mm.addons.mod_page
-     * @ngdoc method
-     * @name $mmaModPage#getPageData
-     * @param {Number} courseid Course ID.
-     * @param {Number} cmid     Course module ID.
-     * @param  {String} key     Name of the property to check.
-     * @param  {Mixed}  value   Value to search.
-     * @return {Promise}        Promise resolved when the page is retrieved.
-     */
-    function getPageData(siteId, courseId, key, value) {
-        return $mmSitesManager.getSite(siteId).then(function(site) {
-            var params = {
-                    courseids: [courseId]
-                },
-                preSets = {
-                    cacheKey: getPageCacheKey(courseId)
-                };
-
-            return site.read('mod_page_get_pages_by_courses', params, preSets).then(function(response) {
-                if (response && response.pages) {
-                    var currentPage;
-                    angular.forEach(response.pages, function(page) {
-                        if (!currentPage && page[key] == value) {
-                            currentPage = page;
-                        }
-                    });
-                    if (currentPage) {
-                        return currentPage;
-                    }
-                }
-                return $q.reject();
-            });
-        });
-    }
-
-    /**
-     * Get a page by course module ID.
-     *
-     * @module mm.addons.mod_page
-     * @ngdoc method
-     * @name $mmaModPage#getPageData
-     * @param {Number} courseId Course ID.
-     * @param {Number} cmId     Course module ID.
-     * @param {String} [siteId] Site ID. If not defined, current site.
-     * @return {Promise}        Promise resolved when the book is retrieved.
-     */
-    self.getPageData = function(courseId, cmId, siteId) {
-        return getPageData(siteId, courseId, 'coursemodule', cmId);
-    };
-
-    /**
-     * Get cache key for page data WS calls.
-     *
-     * @param {Number} courseid Course ID.
-     * @return {String}         Cache key.
-     */
-    function getPageCacheKey(courseid) {
-        return 'mmaModPage:page:' + courseid;
-    }
-
-    /**
-     * Invalidates page data.
-     *
-     * @module mm.addons.mod_page
-     * @ngdoc method
-     * @name $mmaModPage#invalidateBookData
-     * @param {Number} courseId Course ID.
-     * @param {String} [siteId] Site ID. If not defined, current site.
-     * @return {Promise}        Promise resolved when the data is invalidated.
-     */
-    self.invalidatePageData = function(courseId, siteId) {
-        return $mmSitesManager.getSite(siteId).then(function(site) {
-            return site.invalidateWsCacheForKey(getPageCacheKey(courseId));
-        });
-    };
-
-    /**
-     * Invalidate the prefetched content.
-     *
-     * @module mm.addons.mod_page
-     * @ngdoc method
-     * @name $mmaModPage#invalidateContent
-     * @param  {Number} moduleId The module ID.
-     * @param  {Number} courseId Course ID of the module.
-     * @param  {String} [siteId] Site ID. If not defined, current site.
-     * @return {Promise}
-     */
-    self.invalidateContent = function(moduleId, courseId, siteId) {
-        siteId = siteId || $mmSite.getId();
-
-        var promises = [];
-
-        promises.push(self.invalidatePageData(courseId, siteId));
-        promises.push($mmFilepool.invalidateFilesByComponent(siteId, mmaModPageComponent, moduleId));
-        promises.push($mmCourse.invalidateModule(moduleId, siteId));
-
-        return $mmUtil.allPromises(promises);
     };
 
     /**
@@ -254,6 +261,22 @@ angular.module('mm.addons.mod_page')
             return $mmSite.write('mod_page_view_page', params);
         }
         return $q.reject();
+    };
+
+    /**
+     * Prefetch the content.
+     *
+     * @module mm.addons.mod_page
+     * @ngdoc method
+     * @name $mmaModPage#prefetchContent
+     * @param {Object} module The module object returned by WS.
+     * @return {Promise}      Promise resolved when all files have been downloaded. Data returned is not reliable.
+     */
+    self.prefetchContent = function(module) {
+        var files = self.getDownloadableFiles(module),
+            revision = $mmFilepool.getRevisionFromFileList(module.contents),
+            timemod = $mmFilepool.getTimemodifiedFromFileList(module.contents);
+        return $mmFilepool.prefetchPackage($mmSite.getId(), files, mmaModPageComponent, module.id, revision, timemod);
     };
 
     return self;

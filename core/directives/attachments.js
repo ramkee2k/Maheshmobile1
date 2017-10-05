@@ -27,7 +27,7 @@ angular.module('mm.core')
  * scope array, this directive won't update anything, so the module using this directive should be the one
  * uploading and moving the files.
  *
- * All the files added will be copied to the app temporary folder, so they should be deleted after uploading them
+ * All the files added will be copies to the app temproary folder, so they should be deleted after uploading them
  * or if the user cancels the action.
  *
  * Example usage:
@@ -42,7 +42,6 @@ angular.module('mm.core')
  * @param {Number} [maxSubmissions] Maximum number of attachments. Use -1 or undefined for unknown limit.
  * @param {String} [component]      Component the downloaded files will be linked to.
  * @param {Mixed} [componentId]     Component ID the downloaded files will be linked to.
- * @param {Boolean} [allowOffline]  True to allow selecting files in offline.
  */
 .directive('mmAttachments', function($mmText, $translate, $ionicScrollDelegate, $mmUtil, $mmApp, $mmFileUploaderHelper, $q) {
     return {
@@ -54,12 +53,10 @@ angular.module('mm.core')
             maxSize: '@?',
             maxSubmissions: '@?',
             component: '@?',
-            componentId: '@?',
-            allowOffline: '@?'
+            componentId: '@?'
         },
         link: function(scope) {
-            var allowOffline = scope.allowOffline && scope.allowOffline !== 'false';
-                maxSize = parseInt(scope.maxSize, 10);
+            var maxSize = parseInt(scope.maxSize, 10);
             maxSize = !isNaN(maxSize) && maxSize > 0 ? maxSize : -1;
 
             if (maxSize == -1) {
@@ -70,14 +67,13 @@ angular.module('mm.core')
 
             if (typeof scope.maxSubmissions == 'undefined' || scope.maxSubmissions < 0) {
                 scope.maxSubmissions = $translate.instant('mm.core.unknown');
-                scope.unlimitedFiles = true;
             }
 
             scope.add = function() {
-                if (!allowOffline && !$mmApp.isOnline()) {
+                if (!$mmApp.isOnline()) {
                     $mmUtil.showErrorModal('mm.fileuploader.errormustbeonlinetoupload', true);
                 } else {
-                    return $mmFileUploaderHelper.selectFile(maxSize, allowOffline).then(function(result) {
+                    return $mmFileUploaderHelper.selectFile(maxSize).then(function(result) {
                         scope.files.push(result);
                     });
                 }

@@ -21,66 +21,42 @@ angular.module('mm.addons.mod_resource')
  * @ngdoc service
  * @name $mmaModResourcePrefetchHandler
  */
-.factory('$mmaModResourcePrefetchHandler', function($mmaModResource, $mmSite, $mmFilepool, $mmPrefetchFactory, $q,
-            mmaModResourceComponent, $mmCourse, mmCoreDownloaded, mmCoreOutdated) {
+.factory('$mmaModResourcePrefetchHandler', function($mmaModResource, $mmSite, mmaModResourceComponent) {
 
-    var self = $mmPrefetchFactory.createPrefetchHandler(mmaModResourceComponent, true);
+    var self = {};
+
+    self.component = mmaModResourceComponent;
 
     /**
-     * Determine the status of a module based on the current status detected.
+     * Get the download size of a module.
      *
      * @module mm.addons.mod_resource
      * @ngdoc method
-     * @name $mmaModResourcePrefetchHandler#determineStatus
-     * @param {String} status     Current status.
-     * @param  {Boolean} canCheck True if updates can be checked using core_course_check_updates.
-     * @param  {Object} module    The module object returned by WS.
-     * @return {String}           Status to show.
+     * @name $mmaModResourcePrefetchHandler#getDownloadSize
+     * @param {Object} module Module to get the size.
+     * @return {Number}       Size.
      */
-    self.determineStatus = function(status, canCheck, module) {
-        if (status === mmCoreDownloaded && $mmaModResource.hasExternalFile(module)) {
-            // The file is from an external repository, show outdated since we can't tell if it was updated.
-            return mmCoreOutdated;
-        }
-        return status;
-    };
-
-    /**
-     * Prefetch the module.
-     *
-     * @module mm.addons.mod_resource
-     * @ngdoc method
-     * @name $mmaModResourcePrefetchHandler#download
-     * @param  {Object} module   The module object returned by WS.
-     * @param  {Number} courseId Course ID the module belongs to.
-     * @param  {Boolean} single  True if we're downloading a single module, false if we're downloading a whole section.
-     * @return {Promise}         Promise resolved when all files have been downloaded. Data returned is not reliable.
-     */
-    self.download = function(module, courseId, single) {
-        return downloadOrPrefetch(module, courseId, false);
-    };
-
-    /**
-     * Download or prefetch the module.
-     *
-     * @param  {Object} module    The module object returned by WS.
-     * @param  {Number} courseId  Course ID the module belongs to.
-     * @param  {Boolean} prefetch True to prefetch, false to download right away.
-     * @return {Promise}          Promise resolved when all files have been downloaded. Data returned is not reliable.
-     */
-    function downloadOrPrefetch(module, courseId, prefetch) {
-        var promise;
-
-        if ($mmaModResource.isDisplayedInIframe(module)) {
-            promise = $mmFilepool.getPackageDirPathByUrl($mmSite.getId(), module.url);
-        } else {
-            promise = $q.when();
-        }
-
-        return promise.then(function(dirPath) {
-            return self.downloadOrPrefetch(module, courseId, prefetch, dirPath);
+    self.getDownloadSize = function(module) {
+        var size = 0;
+        angular.forEach(module.contents, function(content) {
+            if ($mmaModResource.isFileDownloadable(content) && content.filesize) {
+                size = size + content.filesize;
+            }
         });
-    }
+        return size;
+    };
+
+    /**
+     * Whether or not the module is enabled for the site.
+     *
+     * @module mm.addons.mod_resource
+     * @ngdoc method
+     * @name $mmaModResourcePrefetchHandler#isEnabled
+     * @return {Boolean}
+     */
+    self.isEnabled = function() {
+        return $mmSite.canDownloadFiles();
+    };
 
     /**
      * Prefetch the module.
@@ -94,40 +70,7 @@ angular.module('mm.addons.mod_resource')
      * @return {Promise}         Promise resolved when all files have been downloaded. Data returned is not reliable.
      */
     self.prefetch = function(module, courseId, single) {
-        return downloadOrPrefetch(module, courseId, true);
-    };
-
-    /**
-     * Invalidate the prefetched content.
-     *
-     * @module mm.addons.mod_resource
-     * @ngdoc method
-     * @name $mmaModResourcePrefetchHandler#invalidateContent
-     * @param  {Number} moduleId The module ID.
-     * @param  {Number} courseId Course ID of the module.
-     * @return {Promise}
-     */
-    self.invalidateContent = function(moduleId, courseId) {
-        return $mmaModResource.invalidateContent(moduleId, courseId);
-    };
-
-    /**
-     * Invalidates WS calls needed to determine module status.
-     *
-     * @module mm.addons.mod_resource
-     * @ngdoc method
-     * @name $mmaModResourcePrefetchHandler#invalidateModule
-     * @param  {Object} module   Module to invalidate.
-     * @param  {Number} courseId Course ID the module belongs to.
-     * @return {Promise}         Promise resolved when done.
-     */
-    self.invalidateModule = function(module, courseId) {
-        var promises = [];
-
-        promises.push($mmaModResource.invalidateResourceData(courseId));
-        promises.push($mmCourse.invalidateModule(module.id));
-
-        return $q.all(promises);
+        return $mmaModResource.prefetchContent(module);
     };
 
     return self;

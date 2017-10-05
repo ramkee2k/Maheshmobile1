@@ -21,7 +21,7 @@ angular.module('mm.addons.participants')
  * @ngdoc service
  * @name $mmaParticipantsHandlers
  */
-.factory('$mmaParticipantsHandlers', function($mmaParticipants, mmCoursesAccessMethods, $state, $mmContentLinkHandlerFactory) {
+.factory('$mmaParticipantsHandlers', function($mmaParticipants, mmCoursesAccessMethods, $mmUtil, $state) {
     var self = {};
 
     /**
@@ -47,22 +47,15 @@ angular.module('mm.addons.participants')
         /**
          * Check if handler is enabled for this course.
          *
-         * @param  {Number} courseId     Course ID.
-         * @param  {Object} accessData   Type of access to the course: default, guest, ...
-         * @param  {Object} [navOptions] Course navigation options for current user. See $mmCourses#getUserNavigationOptions.
-         * @param  {Object} [admOptions] Course admin options for current user. See $mmCourses#getUserAdministrationOptions.
-         * @return {Boolean|Promise}     Promise resolved  with true if handler is enabled,
-         *                               false or promise rejected or resolved with false otherwise.
+         * @param {Number} courseId   Course ID.
+         * @param {Object} accessData Type of access to the course: default, guest, ...
+         * @return {Boolean|Promise}  Promise resolved  with true if handler is enabled,
+         *                            false or promise rejected or resolved with false otherwise.
          */
-        self.isEnabledForCourse = function(courseId, accessData, navOptions, admOptions) {
+        self.isEnabledForCourse = function(courseId, accessData) {
             if (accessData && accessData.type == mmCoursesAccessMethods.guest) {
                 return false; // Not enabled for guests.
             }
-
-            if (navOptions && typeof navOptions.participants != 'undefined') {
-                return navOptions.participants;
-            }
-
             return $mmaParticipants.isPluginEnabledForCourse(courseId);
         };
 
@@ -92,41 +85,65 @@ angular.module('mm.addons.participants')
 
     /**
      * Content links handler.
-     * Match user/index.php but NOT grade/report/user/index.php.
      *
      * @module mm.addons.participants
      * @ngdoc method
      * @name $mmaParticipantsHandlers#linksHandler
      */
-    self.linksHandler = $mmContentLinkHandlerFactory.createChild(
-            /\/user\/index\.php/, '$mmCoursesDelegate_mmaParticipants');
+    self.linksHandler = function() {
 
-    // Check if the handler is enabled for a certain site. See $mmContentLinkHandlerFactory#isEnabled.
-    self.linksHandler.isEnabled = function(siteId, url, params, courseId) {
-        courseId = parseInt(params.id, 10) || courseId;
-        if (!courseId || url.indexOf('/grade/report/') != -1) {
-            return false;
-        }
+        var self = {};
 
-        return $mmaParticipants.isPluginEnabledForCourse(courseId, siteId);
-    };
-
-    // Get actions to perform with the link. See $mmContentLinkHandlerFactory#getActions.
-    self.linksHandler.getActions = function(siteIds, url, params, courseId) {
-        courseId = parseInt(params.id, 10) || courseId;
-
-        return [{
-            action: function(siteId) {
-                // Always use redirect to make it the new history root (to avoid "loops" in history).
-                $state.go('redirect', {
-                    siteid: siteId,
-                    state: 'site.participants',
-                    params: {
-                        course: {id: courseId}
-                    }
-                });
+        /**
+         * Get actions to perform with the link.
+         *
+         * @param {String[]} siteIds Site IDs the URL belongs to.
+         * @param {String} url       URL to treat.
+         * @return {Object[]}        List of actions. See {@link $mmContentLinksDelegate#registerLinkHandler}.
+         */
+        self.getActions = function(siteIds, url) {
+            // Check it's a user URL.
+            if (typeof self.handles(url) != 'undefined') {
+                var params = $mmUtil.extractUrlParams(url);
+                if (typeof params.id != 'undefined') {
+                    // Return actions.
+                    return [{
+                        message: 'mm.core.view',
+                        icon: 'ion-eye',
+                        sites: siteIds,
+                        action: function(siteId) {
+                            // Use redirect to make the participants list the new history root (to avoid "loops" in history).
+                            $state.go('redirect', {
+                                siteid: siteId,
+                                state: 'site.participants',
+                                params: {
+                                    course: {id: parseInt(params.id, 10)}
+                                }
+                            });
+                        }
+                    }];
+                }
             }
-        }];
+            return [];
+        };
+
+        /**
+         * Check if the URL is handled by this handler. If so, returns the URL of the site.
+         *
+         * @param  {String} url URL to check.
+         * @return {String}     Site URL. Undefined if the URL doesn't belong to this handler.
+         */
+        self.handles = function(url) {
+            // Verify it's not a grade URL.
+            if (url.indexOf('grade/report/user') == -1) {
+                var position = url.indexOf('/user/index.php');
+                if (position > -1) {
+                    return url.substr(0, position);
+                }
+            }
+        };
+
+        return self;
     };
 
     return self;

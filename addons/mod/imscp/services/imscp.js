@@ -21,8 +21,7 @@ angular.module('mm.addons.mod_imscp')
  * @ngdoc service
  * @name $mmaModImscp
  */
-.factory('$mmaModImscp', function($mmFilepool, $mmSite, $mmFS, $log, $q, $sce, $mmApp, $mmSitesManager, $mmUtil, $mmCourse,
-            mmaModImscpComponent) {
+.factory('$mmaModImscp', function($mmFilepool, $mmSite, $mmFS, $log, $q, $sce, $mmApp, $mmSitesManager, mmaModImscpComponent) {
     $log = $log.getInstance('$mmaModImscp');
 
     var self = {},
@@ -146,64 +145,100 @@ angular.module('mm.addons.mod_imscp')
     };
 
     /**
-     * Get cache key for imscp data WS calls.
-     *
-     * @param {Number} courseId Course ID.
-     * @return {String}         Cache key.
-     */
-    function getImscpDataCacheKey(courseId) {
-        return 'mmaModImscp:imscp:' + courseId;
-    }
-
-    /**
-     * Get a imscp with key=value. If more than one is found, only the first will be returned.
-     *
-     * @param  {String} siteId    Site ID.
-     * @param  {Number} courseId  Course ID.
-     * @param  {String} key       Name of the property to check.
-     * @param  {Mixed}  value     Value to search.
-     * @return {Promise}          Promise resolved when the imscp is retrieved.
-     */
-    function getImscp(siteId, courseId, key, value) {
-        return $mmSitesManager.getSite(siteId).then(function(site) {
-            var params = {
-                    courseids: [courseId]
-                },
-                preSets = {
-                    cacheKey: getImscpDataCacheKey(courseId)
-                };
-
-            return site.read('mod_imscp_get_imscps_by_courses', params, preSets).then(function(response) {
-                if (response && response.imscps) {
-                    var currentImscp;
-                    angular.forEach(response.imscps, function(imscp) {
-                        if (!currentImscp && imscp[key] == value) {
-                            currentImscp = imscp;
-                        }
-                    });
-                    if (currentImscp) {
-                        return currentImscp;
-                    }
-                }
-                return $q.reject();
-            });
-        });
-    }
-
-    /**
-     * Get a imscp by course module ID.
+     * Download all the content. All the files are downloaded inside a folder in filepool, keeping their folder structure.
      *
      * @module mm.addons.mod_imscp
      * @ngdoc method
-     * @name $mmaModImscp#getImscp
-     * @param {Number} courseId Course ID.
-     * @param {Number} cmId     Course module ID.
-     * @param {String} [siteId] Site ID. If not defined, current site.
-     * @return {Promise}        Promise resolved when the imscp is retrieved.
+     * @name $mmaModImscp#downloadAllContent
+     * @param {Object} module The module object.
+     * @return {Promise}      Promise resolved when content is downloaded. Data returned is not reliable.
      */
-    self.getImscp = function(courseId, cmId, siteId) {
-        siteId = siteId || $mmSite.getId();
-        return getImscp(siteId, courseId, 'coursemodule', cmId);
+    self.downloadAllContent = function(module) {
+        var files = self.getDownloadableFiles(module),
+            revision = $mmFilepool.getRevisionFromFileList(module.contents),
+            timemod = $mmFilepool.getTimemodifiedFromFileList(module.contents);
+
+        return $mmFilepool.getPackageDirPathByUrl($mmSite.getId(), module.url).then(function(dirPath) {
+            return $mmFilepool.downloadPackage($mmSite.getId(), files, mmaModImscpComponent, module.id, revision, timemod, dirPath);
+        });
+    };
+
+    /**
+     * Returns a list of files that can be downloaded.
+     *
+     * @module mm.addons.mod_imscp
+     * @ngdoc method
+     * @name $mmaModImscp#getDownloadableFiles
+     * @param {Object} module The module object returned by WS.
+     * @return {Object[]}     List of files.
+     */
+    self.getDownloadableFiles = function(module) {
+        var files = [];
+
+        angular.forEach(module.contents, function(content) {
+            if (self.isFileDownloadable(content)) {
+                files.push(content);
+            }
+        });
+
+        return files;
+    };
+
+    /**
+     * Get event names of files being downloaded.
+     *
+     * @module mm.addons.mod_imscp
+     * @ngdoc method
+     * @name $mmaModImscp#getDownloadingFilesEventNames
+     * @param {Object} module The module object returned by WS.
+     * @return {Promise} Resolved with an array of event names.
+     */
+    self.getDownloadingFilesEventNames = function(module) {
+        var promises = [],
+            eventNames = [],
+            siteid = $mmSite.getId();
+
+        angular.forEach(module.contents, function(content) {
+            var url = content.fileurl;
+            if (!self.isFileDownloadable(content)) {
+                return;
+            }
+            promises.push($mmFilepool.isFileDownloadingByUrl(siteid, url).then(function() {
+                return $mmFilepool.getFileEventNameByUrl(siteid, url).then(function(eventName) {
+                    eventNames.push(eventName);
+                });
+            }, function() {
+                // Ignore fails.
+            }));
+        });
+
+        return $q.all(promises).then(function() {
+            return eventNames;
+        });
+    };
+
+    /**
+     * Returns a list of file event names.
+     *
+     * @module mm.addons.mod_imscp
+     * @ngdoc method
+     * @name $mmaModImscp#getFileEventNames
+     * @param {Object} module The module object returned by WS.
+     * @return {Promise} Promise resolved with array of $mmEvent names.
+     */
+    self.getFileEventNames = function(module) {
+        var promises = [];
+        angular.forEach(module.contents, function(content) {
+            var url = content.fileurl;
+            if (!self.isFileDownloadable(content)) {
+                return;
+            }
+
+            promises.push($mmFilepool.getFileEventNameByUrl($mmSite.getId(), url));
+        });
+        return $q.all(promises).then(function(eventNames) {
+            return eventNames;
+        });
     };
 
     /**
@@ -296,39 +331,11 @@ angular.module('mm.addons.mod_imscp')
      * @module mm.addons.mod_imscp
      * @ngdoc method
      * @name $mmaModImscp#invalidateContent
-     * @param  {Number} moduleId The module ID.
-     * @param  {Number} courseId Course ID of the module.
-     * @param  {String} [siteId] Site ID. If not defined, current site.
+     * @param {Number} moduleId The module ID.
      * @return {Promise}
      */
-    self.invalidateContent = function(moduleId, courseId, siteId) {
-        siteId = siteId || $mmSite.getId();
-
-        var promises = [];
-
-        promises.push(self.invalidateImscpData(courseId, siteId));
-        promises.push($mmFilepool.invalidateFilesByComponent(siteId, mmaModImscpComponent, moduleId));
-        promises.push($mmCourse.invalidateModule(moduleId, siteId));
-
-        return $mmUtil.allPromises(promises);
-    };
-
-
-    /**
-     * Invalidates imscp data.
-     *
-     * @module mm.addons.mod_imscp
-     * @ngdoc method
-     * @name $mmaModImscp#invalidateImscpData
-     * @param {Number} courseId Course ID.
-     * @param {String} siteId]  Site ID. If not defined, current site.
-     * @return {Promise}        Promise resolved when the data is invalidated.
-     */
-    self.invalidateImscpData = function(courseId, siteId) {
-        siteId = siteId || $mmSite.getId();
-        return $mmSitesManager.getSite(siteId).then(function(site) {
-            return site.invalidateWsCacheForKey(getImscpDataCacheKey(courseId));
-        });
+    self.invalidateContent = function(moduleId) {
+        return $mmFilepool.invalidateFilesByComponent($mmSite.getId(), mmaModImscpComponent, moduleId);
     };
 
     /**
@@ -358,7 +365,9 @@ angular.module('mm.addons.mod_imscp')
         siteId = siteId || $mmSite.getId();
 
         return $mmSitesManager.getSite(siteId).then(function(site) {
-            return site.isVersionGreaterEqualThan('2.9') && site.canDownloadFiles();
+            var version = site.getInfo().version;
+            // Require Moodle 2.9.
+            return version && (parseInt(version) >= 2015051100) && site.canDownloadFiles();
         });
     };
 
@@ -379,6 +388,25 @@ angular.module('mm.addons.mod_imscp')
             return $mmSite.write('mod_imscp_view_imscp', params);
         }
         return $q.reject();
+    };
+
+    /**
+     * Prefetch the content. All the files are downloaded inside a folder in filepool, keeping their folder structure.
+     *
+     * @module mm.addons.mod_imscp
+     * @ngdoc method
+     * @name $mmaModImscp#prefetchContent
+     * @param {Object} module The module object returned by WS.
+     * @return {Promise}      Promise resolved when content is downloaded. Data returned is not reliable.
+     */
+    self.prefetchContent = function(module) {
+        var files = self.getDownloadableFiles(module),
+            revision = $mmFilepool.getRevisionFromFileList(module.contents),
+            timemod = $mmFilepool.getTimemodifiedFromFileList(module.contents);
+
+        return $mmFilepool.getPackageDirPathByUrl($mmSite.getId(), module.url).then(function(dirPath) {
+            return $mmFilepool.prefetchPackage($mmSite.getId(), files, mmaModImscpComponent, module.id, revision, timemod, dirPath);
+        });
     };
 
     return self;

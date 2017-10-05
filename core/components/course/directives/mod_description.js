@@ -33,8 +33,6 @@ angular.module('mm.core.course')
  *
  * You can add a note at the right side of the description by using the 'note' attribute.
  *
- * You can also pass a component and componentId to be used in format-text.
- *
  * Module descriptions are shortened by default, allowing the user to see the full description by clicking in it.
  * If you want the whole description to be shown you can use the 'showfull' attribute.
  *
@@ -58,9 +56,7 @@ angular.module('mm.core.course')
         restrict: 'E',
         scope: {
             description: '=',
-            note: '=?',
-            component: '@?',
-            componentId: '@?'
+            note: '='
         },
         templateUrl: 'core/components/course/templates/mod_description.html'
     };

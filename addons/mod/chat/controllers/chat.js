@@ -22,7 +22,7 @@ angular.module('mm.addons.mod_chat')
  * @name mmaModChatChatCtrl
  */
 .controller('mmaModChatChatCtrl', function($scope, $stateParams, $mmApp, $mmaModChat, $log, $ionicModal, $mmUtil, $ionicHistory,
-            $ionicScrollDelegate, $timeout, $mmSite, $interval, mmaChatPollInterval, $q, $mmText) {
+            $ionicScrollDelegate, $timeout, $mmSite, $interval, mmaChatPollInterval, $q) {
 
     $log = $log.getInstance('mmaModChatChatCtrl');
 
@@ -64,7 +64,7 @@ angular.module('mm.addons.mod_chat')
         $mmaModChat.getChatUsers($scope.chatsid).then(function(data) {
             $scope.chatUsers = data.users;
         }).catch(function(error) {
-            $mmUtil.showErrorModalDefault(error, 'mma.mod_chat.errorwhilegettingchatusers', true);
+            showError(error, 'mma.mod_chat.errorwhilegettingchatusers');
         }).finally(function() {
             $scope.usersLoaded = true;
         });
@@ -104,6 +104,16 @@ angular.module('mm.addons.mod_chat')
         });
     }
 
+    // Show error modal.
+    function showError(error, defaultMessage) {
+        if (typeof error === 'string') {
+            $mmUtil.showErrorModal(error);
+        } else {
+            $mmUtil.showErrorModal(defaultMessage, true);
+        }
+        return $q.reject();
+    }
+
     // Start the polling to get chat messages periodically.
     function startPolling() {
         // We already have the polling in place.
@@ -135,8 +145,7 @@ angular.module('mm.addons.mod_chat')
                     $interval.cancel($scope.polling);
                     $scope.polling = undefined;
                 }
-                $mmUtil.showErrorModalDefault(error, 'mma.mod_chat.errorwhileretrievingmessages', true);
-                return $q.reject();
+                return showError(error, 'mma.mod_chat.errorwhileretrievingmessages');
             });
         }).finally(function() {
             pollingRunning = false;
@@ -164,22 +173,19 @@ angular.module('mm.addons.mod_chat')
             // Silent error.
             return;
         }
-        text = $mmText.replaceNewLines(text, '<br>');
+        text = text.replace(/(?:\r\n|\r|\n)/g, '<br />');
 
-        var modal = $mmUtil.showModalLoading('mm.core.sending', true);
         $mmaModChat.sendMessage($scope.chatsid, text, beep).then(function() {
             if (beep === '') {
                 $scope.newMessage.text = '';
             }
             getMessagesInterval(); // Update messages to show the sent message.
-        }).catch(function(error) {
+        }, function(error) {
             // Only close the keyboard if an error happens, we want the user to be able to send multiple
             // messages withoutthe keyboard being closed.
             $mmApp.closeKeyboard();
 
-            $mmUtil.showErrorModalDefault(error, 'mma.mod_chat.errorwhilesendingmessage', true);
-        }).finally(function() {
-            modal.dismiss();
+            showError(error, 'mma.mod_chat.errorwhilesendingmessage');
         });
     };
 
@@ -200,12 +206,10 @@ angular.module('mm.addons.mod_chat')
         return getMessages().then(function() {
             startPolling();
         }).catch(function(error) {
-            $mmUtil.showErrorModalDefault(error, 'mma.mod_chat.errorwhileretrievingmessages', true);
-            $ionicHistory.goBack();
-            return $q.reject();
+            return showError(error, 'mma.mod_chat.errorwhileretrievingmessages');
         });
     }, function(error) {
-        $mmUtil.showErrorModalDefault(error, 'mma.mod_chat.errorwhileconnecting', true);
+        showError(error, 'mma.mod_chat.errorwhileconnecting');
         $ionicHistory.goBack();
     }).finally(function() {
         $scope.loaded = true;

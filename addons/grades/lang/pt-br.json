@@ -1,4 +1,14 @@
 {
-    "nogradesreturned": "Nenhuma avaliação calculada",
-    "viewgrades": "Ver notas"
+    "average": "Média",
+    "contributiontocoursetotal": "Contribuição ao total do curso",
+    "feedback": "Feedback",
+    "grade": "Nota",
+    "grades": "Notas",
+    "itemname": "Item de nota",
+    "lettergrade": "Nota letra",
+    "percentage": "Porcentagem",
+    "range": "Range",
+    "rank": "Posição",
+    "viewgrades": "Ver notas",
+    "weight": "Peso"
 }

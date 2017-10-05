@@ -26,7 +26,8 @@ angular.module('mm.addons.files')
             "itemid": 0,
             "filepath": "",
             "filename": ""
-        };
+        },
+        moodle310version = 2016052300;
 
     /**
      * Check if core_files_get_files WS call is available.
@@ -257,137 +258,22 @@ angular.module('mm.addons.files')
     };
 
     /**
-     * Check if Files is disabled in a certain site.
-     *
-     * @module mm.addons.files
-     * @ngdoc method
-     * @name $mmaFiles#isDisabled
-     * @param  {String} [siteId] Site Id. If not defined, use current site.
-     * @return {Promise}         Promise resolved with true if disabled, rejected or resolved with false otherwise.
-     */
-    self.isDisabled = function(siteId) {
-        return $mmSitesManager.getSite(siteId).then(function(site) {
-            return self.isDisabledInSite(site);
-        });
-    };
-
-    /**
-     * Check if Files is disabled in a certain site.
-     *
-     * @module mm.addons.files
-     * @ngdoc method
-     * @name $mmaFiles#isDisabledInSite
-     * @param  {Object} [site] Site. If not defined, use current site.
-     * @return {Boolean}       True if disabled, false otherwise.
-     */
-    self.isDisabledInSite = function(site) {
-        site = site || $mmSite;
-        return site.isFeatureDisabled('$mmSideMenuDelegate_mmaFiles');
-    };
-
-    /**
-     * Return whether or not the plugin is enabled.
-     * Plugin is enabled if user can see private files, can see site files or can upload private files.
+     * Return whether or not the plugin is enabled. Plugin is enabled if:
+     *     - Site supports core_files_get_files
+     *     or
+     *     - User has capability moodle/user:manageownfiles and WS allows uploading files.
      *
      * @module mm.addons.files
      * @ngdoc method
      * @name $mmaFiles#isPluginEnabled
-     * @return {Boolean} True if enabled, false otherwise.
+     * @return {Boolean}
      */
     self.isPluginEnabled = function() {
-        var canAccessMyFiles = $mmSite.canAccessMyFiles(),
-            canViewMyFiles = self.canAccessFiles() && canAccessMyFiles && !self.isPrivateFilesDisabledInSite(),
-            canViewSiteFiles = !self.isSiteFilesDisabledInSite(),
-            canUploadFiles = canAccessMyFiles && $mmSite.canUploadFiles() && !self.isUploadDisabledInSite();
+        var canAccessFiles = self.canAccessFiles(),
+            canAccessMyFiles = $mmSite.canAccessMyFiles(),
+            canUploadFiles = $mmSite.canUploadFiles();
 
-        return canViewMyFiles || canViewSiteFiles || canUploadFiles;
-    };
-
-    /**
-     * Check if private files is disabled in a certain site.
-     *
-     * @module mm.addons.files
-     * @ngdoc method
-     * @name $mmaFiles#isPrivateFilesDisabled
-     * @param  {String} [siteId] Site Id. If not defined, use current site.
-     * @return {Promise}         Promise resolved with true if disabled, rejected or resolved with false otherwise.
-     */
-    self.isPrivateFilesDisabled = function(siteId) {
-        return $mmSitesManager.getSite(siteId).then(function(site) {
-            return self.isPrivateFilesDisabledInSite(site);
-        });
-    };
-
-    /**
-     * Check if private files is disabled in a certain site.
-     *
-     * @module mm.addons.files
-     * @ngdoc method
-     * @name $mmaFiles#isPrivateFilesDisabledInSite
-     * @param  {Object} [site] Site. If not defined, use current site.
-     * @return {Boolean}       True if disabled, false otherwise.
-     */
-    self.isPrivateFilesDisabledInSite = function(site) {
-        site = site || $mmSite;
-        return site.isFeatureDisabled('files_privatefiles');
-    };
-
-    /**
-     * Check if site files is disabled in a certain site.
-     *
-     * @module mm.addons.files
-     * @ngdoc method
-     * @name $mmaFiles#isSiteFilesDisabled
-     * @param  {String} [siteId] Site Id. If not defined, use current site.
-     * @return {Promise}         Promise resolved with true if disabled, rejected or resolved with false otherwise.
-     */
-    self.isSiteFilesDisabled = function(siteId) {
-        return $mmSitesManager.getSite(siteId).then(function(site) {
-            return self.isSiteFilesDisabledInSite(site);
-        });
-    };
-
-    /**
-     * Check if site files is disabled in a certain site.
-     *
-     * @module mm.addons.files
-     * @ngdoc method
-     * @name $mmaFiles#isSiteFilesDisabledInSite
-     * @param  {Object} [site] Site. If not defined, use current site.
-     * @return {Boolean}       True if disabled, false otherwise.
-     */
-    self.isSiteFilesDisabledInSite = function(site) {
-        site = site || $mmSite;
-        return site.isFeatureDisabled('files_sitefiles');
-    };
-
-    /**
-     * Check if upload files is disabled in a certain site.
-     *
-     * @module mm.addons.files
-     * @ngdoc method
-     * @name $mmaFiles#isUploadDisabled
-     * @param  {String} [siteId] Site Id. If not defined, use current site.
-     * @return {Promise}         Promise resolved with true if disabled, rejected or resolved with false otherwise.
-     */
-    self.isUploadDisabled = function(siteId) {
-        return $mmSitesManager.getSite(siteId).then(function(site) {
-            return self.isUploadDisabledInSite(site);
-        });
-    };
-
-    /**
-     * Check if upload files is disabled in a certain site.
-     *
-     * @module mm.addons.files
-     * @ngdoc method
-     * @name $mmaFiles#isUploadDisabledInSite
-     * @param  {Object} [site] Site. If not defined, use current site.
-     * @return {Boolean}       True if disabled, false otherwise.
-     */
-    self.isUploadDisabledInSite = function(site) {
-        site = site || $mmSite;
-        return site.isFeatureDisabled('files_upload');
+        return canAccessFiles || (canUploadFiles && canAccessMyFiles);
     };
 
     /**
@@ -428,7 +314,8 @@ angular.module('mm.addons.files')
         siteId = siteId || $mmSite.getId();
 
         return $mmSitesManager.getSite(siteId).then(function(site) {
-            return site.isVersionGreaterEqualThan('3.1.0');
+            var version = parseInt(site.getInfo().version, 10);
+            return version && version >= moodle310version;
         });
     };
 
@@ -445,12 +332,16 @@ angular.module('mm.addons.files')
         siteId = siteId || $mmSite.getId();
 
         return $mmSitesManager.getSite(siteId).then(function(site) {
-            if (site.isVersionGreaterEqualThan('3.1.1')) {
+            var version = parseInt(site.getInfo().version, 10);
+            if (!version) {
+                // Cannot determine version, return false.
+                return false;
+            } else if (version == moodle310version) {
+                // Uploading is not working right now for Moodle 3.1.0 (2016052300).
+                return false;
+            } else if (version > moodle310version) {
                 // In Moodle 3.1.1 or higher we need a WS to move to private files.
                 return self.canMoveFromDraftToPrivate(siteId);
-            } else if (site.isVersionGreaterEqualThan('3.1.0')) {
-                // Upload private files doesn't work for Moodle 3.1.0 due to a bug.
-                return false;
             }
 
             return true;

@@ -42,12 +42,18 @@ angular.module('mm.core.question')
                     name: 'state'
                 },
                 {
+                    // Not using compound indexes because they seem to have issues with where().
                     name: 'componentAndAttempt',
-                    keyPath: ['component', 'attemptid']
+                    generator: function(obj) {
+                        return [obj.component, obj.attemptid];
+                    }
                 },
                 {
+                    // Not using compound indexes because they seem to have issues with where().
                     name: 'componentAndComponentId',
-                    keyPath: ['component', 'componentId']
+                    generator: function(obj) {
+                        return [obj.component, obj.componentId];
+                    }
                 }
             ]
         },
@@ -74,16 +80,25 @@ angular.module('mm.core.question')
                     name: 'questionslot'
                 },
                 {
+                    // Not using compound indexes because they seem to have issues with where().
                     name: 'componentAndAttempt',
-                    keyPath: ['component', 'attemptid']
+                    generator: function(obj) {
+                        return [obj.component, obj.attemptid];
+                    }
                 },
                 {
+                    // Not using compound indexes because they seem to have issues with where().
                     name: 'componentAndComponentId',
-                    keyPath: ['component', 'componentId']
+                    generator: function(obj) {
+                        return [obj.component, obj.componentId];
+                    }
                 },
                 {
+                    // Not using compound indexes because they seem to have issues with where().
                     name: 'componentAndAttemptAndQuestion',
-                    keyPath: ['component', 'attemptid', 'questionslot']
+                    generator: function(obj) {
+                        return [obj.component, obj.attemptid, obj.questionslot];
+                    }
                 }
             ]
         }

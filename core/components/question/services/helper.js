@@ -22,7 +22,7 @@ angular.module('mm.core.question')
  * @name $mmQuestionHelper
  */
 .factory('$mmQuestionHelper', function($mmUtil, $mmText, $ionicModal, mmQuestionComponent, $mmSitesManager, $mmFilepool, $q,
-            $mmQuestion, $mmSite, $mmQuestionDelegate) {
+            $mmQuestion, $mmSite) {
 
     var self = {},
         lastErrorShown = 0;
@@ -172,7 +172,7 @@ angular.module('mm.core.question')
     self.extractQbehaviourRedoButton = function(question) {
         // Create a fake div element so we can search using querySelector.
         var div = document.createElement('div'),
-            redoSelector = 'input[type="submit"][name*=redoslot], input[type="submit"][name*=tryagain]';
+            redoSelector = 'input[type="submit"][name*=redoslot]';
 
         // Search redo button in feedback (Moodle 3.1+).
         if (!searchButton('html', '.outcome ' + redoSelector)) {
@@ -186,7 +186,7 @@ angular.module('mm.core.question')
             }
 
             // Button still not found. Now search in the info box if it exists.
-            if (question.infoHtml) {
+            if (!question.infoHtml) {
                 searchButton('infoHtml', redoSelector);
             }
         }
@@ -591,6 +591,8 @@ angular.module('mm.core.question')
      * @module mm.core.question
      * @ngdoc method
      * @name $mmQuestionHelper#loadLocalAnswersInHtml
+     * @param  {String} component Component the answers belong to.
+     * @param  {Number} attemptId Attempt ID.
      * @param  {Object} question  Question.
      * @return {Void}
      */
@@ -685,7 +687,6 @@ angular.module('mm.core.question')
                 rowModel.id = select.id;
                 rowModel.name = select.name;
                 rowModel.disabled = select.disabled;
-                rowModel.selected = false;
                 rowModel.options = [];
 
                 // Check if answer is correct.
@@ -701,17 +702,12 @@ angular.module('mm.core.question')
                         log.warn('Aborting because couldn\'t find option value.', question.name);
                         return self.showDirectiveError(scope);
                     }
-                    var opt = {
+
+                    rowModel.options.push({
                         value: option.value,
                         label: option.innerHTML,
                         selected: option.selected
-                    };
-
-                    if (opt.selected) {
-                        rowModel.selected = opt;
-                    }
-
-                    rowModel.options.push(opt);
+                    });
                 });
 
                 // Get the accessibility label.
@@ -825,19 +821,12 @@ angular.module('mm.core.question')
      * @module mm.core.question
      * @ngdoc method
      * @name $mmQuestionHelper#prefetchQuestionFiles
-     * @param  {Object} question     Question.
-     * @param  {String} [siteId]     Site ID. If not defined, current site.
-     * @param  {String} component    The component to link the files to. If not defined, question component.
-     * @param  {Mixed} [componentId] An ID to use in conjunction with the component. If not defined, question ID.
-     * @return {Promise}             Promise resolved when all the files have been downloaded.
+     * @param  {Object} question Question.
+     * @param  {String} [siteId] Site ID. If not defined, current site.
+     * @return {Promise}         Promise resolved when all the files have been downloaded.
      */
-    self.prefetchQuestionFiles = function(question, siteId, component, componentId) {
+    self.prefetchQuestionFiles = function(question, siteId) {
         var urls = $mmUtil.extractDownloadableFilesFromHtml(question.html);
-
-        if (!component) {
-            component = mmQuestionComponent;
-            componentId = question.id;
-        }
 
         return $mmSitesManager.getSite(siteId).then(function(site) {
             var promises = [];
@@ -851,42 +840,10 @@ angular.module('mm.core.question')
                     return;
                 }
 
-                promises.push($mmFilepool.addToQueueByUrl(siteId, url, component, componentId));
+                promises.push($mmFilepool.addToQueueByUrl(siteId, url, mmQuestionComponent, question.id));
             });
 
             return $q.all(promises);
-        });
-    };
-
-    /**
-     * Prepare and return the answers.
-     *
-     * @module mm.core.question
-     * @ngdoc method
-     * @name $mmQuestionHelper#prepareAnswers
-     * @param  {Object[]} questions The list of questions.
-     * @param  {Object} answers     The input data.
-     * @param  {Boolean} offline    True if data should be saved in offline.
-     * @param  {String} [siteId]    Site ID. If not defined, current site.
-     * @return {Promise}            Promise resolved with answers to send to server.
-     */
-    self.prepareAnswers = function(questions, answers, offline, siteId) {
-        siteId = siteId || $mmSite.getId();
-
-        var promises = [],
-            error;
-
-        angular.forEach(questions, function(question) {
-            promises.push($mmQuestionDelegate.prepareAnswersForQuestion(question, answers, offline, siteId).catch(function(e) {
-                error = e;
-                return $q.reject();
-            }));
-        });
-
-        return $mmUtil.allPromises(promises).then(function() {
-            return answers;
-        }).catch(function() {
-            return $q.reject(error);
         });
     };
 

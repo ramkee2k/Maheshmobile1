@@ -22,46 +22,42 @@ angular.module('mm.addons.mod_assign')
  * @name $mmaModAssignPrefetchHandler
  */
 .factory('$mmaModAssignPrefetchHandler', function($mmaModAssign, mmaModAssignComponent, $mmSite, $mmFilepool, $q, $mmCourseHelper,
-        $mmCourse, $mmGroups, $mmUser, $mmaModAssignSubmissionDelegate, $mmaModAssignFeedbackDelegate, $mmPrefetchFactory,
-        $mmGrades, $mmSitesManager, $mmaModAssignHelper) {
+        $mmCourse, $mmGroups, $mmUser, $mmaModAssignSubmissionDelegate, $mmaModAssignFeedbackDelegate, mmCoreDownloading,
+        mmCoreDownloaded) {
 
-    var self = $mmPrefetchFactory.createPrefetchHandler(mmaModAssignComponent, false);
+    var self = {},
+        downloadPromises = {}; // Store download promises to prevent duplicate requests.
 
-    // RegExp to check if a module has updates based on the result of $mmCoursePrefetchDelegate#getCourseUpdates.
-    self.updatesNames = /^configuration$|^.*files$|^submissions$|^grades$|^gradeitems$|^outcomes$|^comments$/;
+    self.component = mmaModAssignComponent;
 
     /**
-     * Check if a certain module can use core_course_check_updates to check if it has updates.
+     * Get the download size of a module.
      *
      * @module mm.addons.mod_assign
      * @ngdoc method
-     * @name $mmaModAssignPrefetchHandler#canUseCheckUpdates
-     * @param  {Object} module   The module object returned by WS.
-     * @param  {Number} courseId Course ID the module belongs to.
-     * @return {Promise}         Promise resolved with a boolean: whether the module can use core_course_check_updates.
+     * @name $mmaModAssignPrefetchHandler#getDownloadSize
+     * @param {Object} module Module to get the size.
+     * @param {Number} courseId Course ID the module belongs to.
+     * @param  {String} [siteId] Site ID. If not defined, current site.
+     * @return {Promise}       Size.
      */
-    self.canUseCheckUpdates = function(module, courseId) {
-        // Teachers cannot use the WS because it doesn't check student submissions.
-        return $mmaModAssign.getAssignment(courseId, module.id).then(function(assign) {
-            return $mmaModAssign.getSubmissions(assign.id);
-        }).then(function(data) {
-            return !data.canviewsubmissions;
+    self.getDownloadSize = function(module, courseId, siteId) {
+        siteId = siteId || $mmSite.getId();
+
+        return self.getFiles(module, courseId, siteId).then(function(files) {
+            var size = 0;
+            angular.forEach(files, function(file) {
+                if (file.filesize) {
+                    size = size + file.filesize;
+                }
+            });
+
+            // Avoid failing.
+            if (size == 0) {
+                return 1;
+            }
+            return size;
         });
-    };
-
-    /**
-     * Download the module.
-     *
-     * @module mm.addons.mod_assign
-     * @ngdoc method
-     * @name $mmaModAssignPrefetchHandler#download
-     * @param  {Object} module   The module object returned by WS.
-     * @param  {Number} courseId Course ID the module belongs to.
-     * @return {Promise}         Promise resolved when all files have been downloaded. Data returned is not reliable.
-     */
-    self.download = function(module, courseId) {
-        // Assigns cannot be downloaded right away, only prefetched.
-        return self.prefetch(module, courseId);
     };
 
     /**
@@ -79,16 +75,14 @@ angular.module('mm.addons.mod_assign')
         siteId = siteId || $mmSite.getId();
 
         return $mmaModAssign.getAssignment(courseId, module.id, siteId).then(function(assign) {
-            // Get intro files and attachments.
             var files = assign.introattachments || [];
-            files = files.concat(self.getIntroFilesFromInstance(module, assign));
 
             return $mmaModAssign.getSubmissions(assign.id, siteId).then(function(data) {
                 var blindMarking = assign.blindmarking && !assign.revealidentities;
 
                 if (data.canviewsubmissions) {
                     // Teacher, get all submissions.
-                    return $mmaModAssign.getSubmissionsUserData(data.submissions, courseId, assign.id, blindMarking, false, siteId)
+                    return $mmaModAssign.getSubmissionsUserData(data.submissions, courseId, assign.id, blindMarking)
                             .then(function(submissions) {
 
                         var promises = [];
@@ -123,12 +117,12 @@ angular.module('mm.addons.mod_assign')
     /**
      * Get submission files.
      *
-     * @param  {Object}     assign          Assign.
-     * @param  {Number}     submitId        User ID of the submission to get.
-     * @param  {Boolean}    blindMarking    True if blind marking, false otherwise.
-     * @param  {Object[]}   plugins         Submission plugins. Only used for legacy code.
-     * @param  {String}     siteId          Site ID. If not defined, current site.
-     * @return {Promise}                    Promise resolved with array of files.
+     * @param  {Object} assign        Assign.
+     * @param  {Number} submitId      User ID of the submission to get.
+     * @param  {Boolean} blindMarking True if blind marking, false otherwise.
+     * @param  {Object[]} plugins     Submission plugins. Only used for legacy code.
+     * @param  {String} [siteId]      Site ID. If not defined, current site.
+     * @return {Promise}              Promise resolved with array of files.
      */
     function getSubmissionFiles(assign, submitId, blindMarking, plugins, siteId) {
         return $mmaModAssign.getSubmissionStatus(assign.id, submitId, blindMarking, true, false, siteId).then(function(response) {
@@ -179,34 +173,18 @@ angular.module('mm.addons.mod_assign')
     }
 
     /**
-     * Get revision of an assign. Right now assignment files don't have revision, so we'll always return 0.
-     *
-     * @module mm.addons.mod_assign
-     * @ngdoc method
-     * @name $mmaModAssignPrefetchHandler#getRevision
-     * @param {Object} module   Module to get the revision.
-     * @param {Number} courseId Course ID the module belongs to.
-     * @return {String}         Revision.
-     */
-    self.getRevision = function(module, courseId) {
-        return "0";
-    };
-
-    /**
      * Get timemodified of a Assign.
      *
      * @module mm.addons.mod_assign
      * @ngdoc method
      * @name $mmaModAssignPrefetchHandler#getTimemodified
-     * @param {Object}  module   Module to get the timemodified.
-     * @param {Number}  courseId Course ID the module belongs to.
+     * @param {Object} module   Module to get the timemodified.
+     * @param {Number} courseId Course ID the module belongs to.
      * @param  {String} [siteId] Site ID. If not defined, current site.
      * @return {Promise}         Timemodified.
      */
     self.getTimemodified = function(module, courseId, siteId) {
         var lastModified = 0;
-        siteId = siteId || $mmSite.getId();
-
         return $mmaModAssign.getAssignment(courseId, module.id, siteId).then(function(assign) {
             lastModified = assign.timemodified;
 
@@ -216,14 +194,14 @@ angular.module('mm.addons.mod_assign')
 
                 if (data.canviewsubmissions) {
                     // Teacher, get all submissions.
-                    promise = $mmaModAssign.getSubmissionsUserData(data.submissions, courseId, assign.id, blindMarking, false,
-                            siteId).then(function(submissions) {
+                    promise = $mmaModAssign.getSubmissionsUserData(data.submissions, courseId, assign.id, blindMarking)
+                            .then(function(submissions) {
 
                         var promises = [];
                         // Get Submission status with all files
                         angular.forEach(submissions, function(submission) {
-                            promises.push(getSubmissionTimemodified(assign, courseId, module.id, submission.submitid,
-                                    !!submission.blindid, siteId, submission.timemodified));
+                            promises.push(getSubmissionTimemodified(assign, submission.submitid,
+                                    !!submission.blindid, submission.timemodified, siteId));
                         });
 
                         return $q.all(promises).then(function(lastmodifiedTimes) {
@@ -233,9 +211,7 @@ angular.module('mm.addons.mod_assign')
                     });
                 } else {
                     // Student, get only his/her submissions.
-                    promise = $mmSitesManager.getSite(siteId).then(function(site) {
-                        return getSubmissionTimemodified(assign, courseId, module.id, site.getUserId(), blindMarking, siteId);
-                    });
+                    promise = getSubmissionTimemodified(assign, $mmSite.getUserId(), blindMarking, undefined, siteId);
                 }
 
                 return promise.then(function(submissionTimemodified) {
@@ -257,16 +233,14 @@ angular.module('mm.addons.mod_assign')
     /**
      * Get submission timemodified.
      *
-     * @param  {Object}     assign          Assign.
-     * @param  {Number}     courseId        Course ID.
-     * @param  {Number}     moduleId        Module ID.
-     * @param  {Number}     submitId        User ID of the submission to get.
-     * @param  {Boolean}    blindMarking    True if blind marking, false otherwise.
-     * @param  {String}     siteId          Site ID.
-     * @param  {Number}     [timemodified]  Submission timemodified, undefined if unknown.
-     * @return {Promise}                Promise resolved with array of files.
+     * @param  {Object} assign         Assign.
+     * @param  {Number} submitId       User ID of the submission to get.
+     * @param  {Boolean} blindMarking  True if blind marking, false otherwise.
+     * @param  {Number} [timemodified] Submission timemodified, undefined if unknown.
+     * @param  {String} [siteId]       Site ID. If not defined, current site.
+     * @return {Promise}               Promise resolved with array of files.
      */
-    function getSubmissionTimemodified(assign, courseId, moduleId, submitId, blindMarking, siteId, timemodified) {
+    function getSubmissionTimemodified(assign, submitId, blindMarking, timemodified, siteId) {
         return $mmaModAssign.getSubmissionStatus(assign.id, submitId, blindMarking, true, false, siteId)
                 .then(function(response) {
             var lastModified = 0;
@@ -282,14 +256,6 @@ angular.module('mm.addons.mod_assign')
                 lastModified = response.feedback.gradeddate;
             }
 
-            if (submitId) {
-                return $mmGrades.getGradeModuleItems(courseId, moduleId, submitId, null, siteId).then(function(gradeitems) {
-                    var lastmodifiedTimes = gradeitems.map(function (value) {return value.gradedategraded || 0;});
-                    lastmodifiedTimes.unshift(lastModified);
-                    return Math.max.apply(null, lastmodifiedTimes);
-                });
-            }
-
             return lastModified;
         }).catch(function(error) {
             if (typeof error != 'undefined' || !timemodified) {
@@ -301,41 +267,15 @@ angular.module('mm.addons.mod_assign')
     }
 
     /**
-     * Invalidate the prefetched content.
+     * Whether or not the module is enabled for the site.
      *
      * @module mm.addons.mod_assign
      * @ngdoc method
-     * @name $mmaModAssignPrefetchHandler#invalidateContent
-     * @param  {Number} moduleId The module ID.
-     * @param  {Number} courseId Course ID of the module.
-     * @return {Promise}
+     * @name $mmaModAssignPrefetchHandler#isEnabled
+     * @return {Boolean}
      */
-    self.invalidateContent = function(moduleId, courseId) {
-        return $mmaModAssign.invalidateContent(moduleId, courseId);
-    };
-
-    /**
-     * Invalidates WS calls needed to determine module status.
-     *
-     * @module mm.addons.mod_assign
-     * @ngdoc method
-     * @name $mmaModAssignPrefetchHandler#invalidateModule
-     * @param  {Object} module   Module to invalidate.
-     * @param  {Number} courseId Course ID the module belongs to.
-     * @return {Promise}         Promise resolved when done.
-     */
-    self.invalidateModule = function(module, courseId) {
-        // Always invalidate all the data since some assigns cannot use check updates.
-        var siteId = $mmSite.getId();
-        return $mmaModAssign.getAssignment(courseId, module.id, siteId).then(function(assign) {
-            var promises = [];
-
-            promises.push($mmaModAssign.invalidateAssignmentData(courseId, siteId));
-            promises.push($mmaModAssign.invalidateAllSubmissionData(assign.id, siteId));
-            promises.push($mmaModAssign.invalidateAssignmentUserMappingsData(assign.id, siteId));
-
-            return $q.all(promises);
-        });
+    self.isEnabled = function() {
+        return $mmaModAssign.isPluginEnabled();
     };
 
     /**
@@ -353,15 +293,17 @@ angular.module('mm.addons.mod_assign')
     };
 
     /**
-     * Whether or not the module is enabled for the site.
+     * Invalidates WS calls needed to determine module status.
      *
      * @module mm.addons.mod_assign
      * @ngdoc method
-     * @name $mmaModAssignPrefetchHandler#isEnabled
-     * @return {Boolean}
+     * @name $mmaModAssignPrefetchHandler#invalidateModule
+     * @param  {Object} module   Module to invalidate.
+     * @param  {Number} courseId Course ID the module belongs to.
+     * @return {Promise}         Promise resolved when done.
      */
-    self.isEnabled = function() {
-        return $mmaModAssign.isPluginEnabled();
+    self.invalidateModule = function(module, courseId) {
+        return $mmaModAssign.invalidateContent(module.id, courseId);
     };
 
     /**
@@ -376,77 +318,96 @@ angular.module('mm.addons.mod_assign')
      * @return {Promise}         Promise resolved when all files have been downloaded. Data returned is not reliable.
      */
     self.prefetch = function(module, courseId, single) {
-        return self.prefetchPackage(module, courseId, single, prefetchAssign);
-    };
-
-    /**
-     * Prefetch an assign.
-     *
-     * @param  {Object}  module     The module object returned by WS.
-     * @param  {Number}  courseId   Course ID the module belongs to.
-     * @param  {Boolean} single     True if we're downloading a single module, false if we're downloading a whole section.
-     * @param  {String}  [siteId]   Site ID. If not defined, current site.
-     * @return {Promise}            Promise resolved with an object with 'revision' and 'timemod'.
-     */
-    function prefetchAssign(module, courseId, single, siteId) {
-        var userId = $mmSite.getUserId(),
+        var siteId = $mmSite.getId(),
+            userId = $mmSite.getUserId(),
+            prefetchPromise,
+            deleted = false,
             revision,
             timemod,
-            promises = [];
+            component = mmaModAssignComponent;
 
-        siteId = siteId || $mmSite.getId();
+        if (downloadPromises[siteId] && downloadPromises[siteId][module.id]) {
+            // There's already a download ongoing for this package, return the promise.
+            return downloadPromises[siteId][module.id];
+        } else if (!downloadPromises[siteId]) {
+            downloadPromises[siteId] = {};
+        }
 
-        promises.push($mmCourse.getModuleBasicInfo(module.id, siteId));
+        // Mark package as downloading.
+        prefetchPromise = $mmFilepool.storePackageStatus(siteId, component, module.id, mmCoreDownloading).then(function() {
+            var promises = [];
 
-        // Get Assignment to retrieve all its submissions.
-        promises.push($mmaModAssign.getAssignment(courseId, module.id, siteId).then(function(assign) {
-            var subPromises = [],
-                blindMarking = assign.blindmarking && !assign.revealidentities;
+            promises.push($mmCourse.getModuleBasicInfo(module.id, siteId));
 
-            if (blindMarking) {
-                subPromises.push($mmaModAssign.getAssignmentUserMappings(assign.id, false, siteId).catch(function() {
-                    // Fail silently (Moodle < 2.6)
+            // Get Assignment to retrieve all its submissions.
+            promises.push($mmaModAssign.getAssignment(courseId, module.id, siteId).then(function(assign) {
+                var subPromises = [],
+                    blindMarking = assign.blindmarking && !assign.revealidentities;
+
+                if (blindMarking) {
+                    subPromises.push($mmaModAssign.getAssignmentUserMappings(assign.id, false, siteId).catch(function() {
+                        // Fail silently (Moodle < 2.6)
+                    }));
+                }
+
+                subPromises.push(prefetchSubmissions(assign, courseId, siteId, userId));
+
+                subPromises.push($mmCourseHelper.getModuleCourseIdByInstance(assign.id, 'assign', siteId));
+
+                // Get related submissions files and fetch them.
+                subPromises.push(self.getFiles(module, courseId, siteId).then(function(files) {
+                    var filePromises = [];
+
+                    revision = $mmFilepool.getRevisionFromFileList(files);
+
+                    angular.forEach(files, function(file) {
+                        var url = file.fileurl;
+                        filePromises.push($mmFilepool.addToQueueByUrl(siteId, url, component, module.id, file.timemodified));
+                    });
+
+                    return $q.all(filePromises);
                 }));
-            }
 
-            subPromises.push(prefetchSubmissions(assign, courseId, module.id, siteId, userId));
-
-            subPromises.push($mmCourseHelper.getModuleCourseIdByInstance(assign.id, 'assign', siteId));
-
-            // Get related submissions files and fetch them.
-            subPromises.push(self.getFiles(module, courseId, siteId).then(function(files) {
-                revision = self.getRevision(module, courseId);
-                return $mmFilepool.addFilesToQueueByUrl(siteId, files, self.component, module.id);
+                return $q.all(subPromises);
             }));
 
-            return $q.all(subPromises);
-        }));
+            // Get timemodified.
+            promises.push(self.getTimemodified(module, courseId, siteId).then(function(timemodified) {
+                timemod = timemodified;
+            }));
 
-        // Get timemodified.
-        promises.push(self.getTimemodified(module, courseId, siteId).then(function(timemodified) {
-            timemod = timemodified;
-        }));
-
-        return $q.all(promises).then(function() {
-            // Return revision and timemodified.
-            return {
-                revision: revision,
-                timemod: timemod
-            };
+            return $q.all(promises);
+        }).then(function() {
+            // Prefetch finished, mark as downloaded.
+            return $mmFilepool.storePackageStatus(siteId, component, module.id, mmCoreDownloaded, revision, timemod);
+        }).catch(function(error) {
+            // Error prefetching, go back to previous status and reject the promise.
+            return $mmFilepool.setPackagePreviousStatus(siteId, component, module.id).then(function() {
+                return $q.reject(error);
+            });
+        }).finally(function() {
+            deleted = true;
+            delete downloadPromises[siteId][module.id];
         });
-    }
+
+        if (!deleted) {
+            downloadPromises[siteId][module.id] = prefetchPromise;
+        }
+        return prefetchPromise;
+    };
 
     /**
      * Prefetch assign submissions.
      *
      * @param  {Object} assign     Assign.
      * @param  {Number} courseId   Course ID.
-     * @param  {Number} moduleId   Module ID.
-     * @param  {String} siteId     Site ID. If not defined, current site.
-     * @param  {Number} userId     User ID. If not defined, current user.
+     * @param  {String} [siteId]   Site ID. If not defined, current site.
+     * @param  {Number} [userId]   User ID. If not defined, current user.
      * @return {Promise}           Promise resolved when prefetched, rejected otherwise.
      */
-    function prefetchSubmissions(assign, courseId, moduleId, siteId, userId) {
+    function prefetchSubmissions(assign, courseId, siteId, userId) {
+        siteId = siteId || $mmSite.getId();
+        userId = userId || $mmSite.getUserId();
 
         // Get submissions.
         return $mmaModAssign.getSubmissions(assign.id, siteId).then(function(data) {
@@ -456,13 +417,13 @@ angular.module('mm.addons.mod_assign')
             if (data.canviewsubmissions) {
                 // Teacher.
                 // Do not send participants to getSubmissionsUserData to retrieve user profiles.
-                promises.push($mmaModAssign.getSubmissionsUserData(data.submissions, courseId, assign.id, blindMarking, false)
+                promises.push($mmaModAssign.getSubmissionsUserData(data.submissions, courseId, assign.id, blindMarking, false, siteId)
                         .then(function(submissions) {
                     var subPromises = [];
                     angular.forEach(submissions, function(submission) {
                         subPromises.push($mmaModAssign.getSubmissionStatus(
                                 assign.id, submission.submitid, !!submission.blindid, true, false, siteId).then(function(subm) {
-                            return prefetchSubmission(assign, courseId, moduleId, subm, siteId, submission.submitid);
+                            return prefetchSubmission(assign, courseId, subm, siteId);
                         }));
                     });
                     return $q.all(subPromises).catch(function() {
@@ -471,7 +432,7 @@ angular.module('mm.addons.mod_assign')
                 }));
 
                 // Get list participants.
-                promises.push($mmaModAssignHelper.getParticipants(assign, siteId).then(function (participants) {
+                promises.push($mmaModAssign.listParticipants(assign.id, 0, siteId).then(function (participants) {
                     angular.forEach(participants, function(participant) {
                         if (participant.profileimageurl) {
                             $mmFilepool.addToQueueByUrl(siteId, participant.profileimageurl);
@@ -483,11 +444,10 @@ angular.module('mm.addons.mod_assign')
             } else {
                 // Student.
                 promises.push($mmaModAssign.getSubmissionStatus(assign.id, userId, false, true, false, siteId).then(function(subm) {
-                    return prefetchSubmission(assign, courseId, moduleId, subm, siteId, userId);
+                    return prefetchSubmission(assign, courseId, subm, siteId);
                 }));
             }
 
-            promises.push($mmGroups.activityHasGroups(assign.cmid));
             promises.push($mmGroups.getActivityAllowedGroups(assign.cmid, false, siteId));
 
             return $q.all(promises);
@@ -499,24 +459,28 @@ angular.module('mm.addons.mod_assign')
      *
      * @param  {Object} assign     Assign.
      * @param  {Number} courseId   Course ID.
-     * @param  {Number} moduleId   Module ID.
      * @param  {Object} submission Data returned by $mmaModAssign#getSubmissionStatus.
-     * @param  {String} siteId     Site ID.
-     * @param  {String} userId     User submission ID.
+     * @param  {String} [siteId]   Site ID. If not defined, current site.
      * @return {Promise}           Promise resolved when prefetched, rejected otherwise.
      */
-    function prefetchSubmission(assign, courseId, moduleId, submission, siteId, userId) {
+    function prefetchSubmission(assign, courseId, submission, siteId) {
+        siteId = siteId || $mmSite.getId();
 
         var promises = [],
-            blindMarking = assign.blindmarking && !assign.revealidentities,
-            userIds = [];
+            blindMarking = assign.blindmarking && !assign.revealidentities;
 
         if (submission.lastattempt) {
             var userSubmission = $mmaModAssign.getSubmissionObjectFromAttempt(assign, submission.lastattempt);
 
-            // Get IDs of the members who need to submit.
+            // Get profile and images of the member who need to submit.
             if (!blindMarking && submission.lastattempt.submissiongroupmemberswhoneedtosubmit) {
-                userIds = userIds.concat(submission.lastattempt.submissiongroupmemberswhoneedtosubmit);
+                angular.forEach(submission.lastattempt.submissiongroupmemberswhoneedtosubmit, function(member) {
+                    promises.push($mmUser.getProfile(member, courseId).then(function(profile) {
+                        if (profile.profileimageurl) {
+                            $mmFilepool.addToQueueByUrl(siteId, profile.profileimageurl);
+                        }
+                    }));
+                });
             }
 
             if (userSubmission && userSubmission.id) {
@@ -525,9 +489,13 @@ angular.module('mm.addons.mod_assign')
                     promises.push($mmaModAssignSubmissionDelegate.prefetch(assign, userSubmission, plugin, siteId));
                 });
 
-                // Get ID of the user who did the submission.
+                // Prefetch user profile.
                 if (userSubmission.userid) {
-                    userIds.push(userSubmission.userid);
+                    promises.push($mmUser.getProfile(userSubmission.userid, courseId).then(function(profile) {
+                        if (profile.profileimageurl) {
+                            $mmFilepool.addToQueueByUrl(siteId, profile.profileimageurl);
+                        }
+                    }));
                 }
             }
         }
@@ -536,11 +504,11 @@ angular.module('mm.addons.mod_assign')
         if (submission.feedback) {
             // Get profile and image of the grader.
             if (submission.feedback.grade && submission.feedback.grade.grader) {
-                userIds.push(submission.feedback.grade.grader);
-            }
-
-            if (userId) {
-                promises.push($mmGrades.getGradeModuleItems(courseId, moduleId, userId, null, siteId));
+                promises.push($mmUser.getProfile(submission.feedback.grade.grader, courseId).then(function(profile) {
+                    if (profile.profileimageurl) {
+                        $mmFilepool.addToQueueByUrl(siteId, profile.profileimageurl);
+                    }
+                }));
             }
 
             // Prefetch feedback plugins data.
@@ -548,9 +516,6 @@ angular.module('mm.addons.mod_assign')
                 promises.push($mmaModAssignFeedbackDelegate.prefetch(assign, submission, plugin, siteId));
             });
         }
-
-        // Prefetch user profiles.
-        promises.push($mmUser.prefetchProfiles(userIds, courseId, siteId));
 
         return $q.all(promises);
     }

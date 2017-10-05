@@ -21,11 +21,11 @@ angular.module('mm.addons.mod_quiz')
  * @ngdoc controller
  * @name mmaModQuizIndexCtrl
  */
-.controller('mmaModQuizIndexCtrl', function($scope, $stateParams, $mmaModQuiz, $mmCourse, $q, $translate,
+.controller('mmaModQuizIndexCtrl', function($scope, $stateParams, $mmaModQuiz, $mmCourse, $ionicPlatform, $q, $translate,
             $mmaModQuizHelper, $ionicHistory, $ionicScrollDelegate, $mmEvents, mmaModQuizEventAttemptFinished, $state,
-            $mmQuestionBehaviourDelegate, $mmaModQuizSync, $mmText, $mmUtil, $mmCourseHelper, mmaModQuizEventAutomSynced, $mmSite,
+            $mmQuestionBehaviourDelegate, $mmaModQuizSync, $mmText, $mmUtil, mmaModQuizEventAutomSynced, $mmSite,
             $mmCoursePrefetchDelegate, mmCoreDownloaded, mmCoreDownloading, mmCoreEventPackageStatusChanged,
-            mmaModQuizComponent, $mmaModQuizPrefetchHandler, $mmApp, mmCoreEventOnlineStatusChanged) {
+            mmaModQuizComponent) {
     var module = $stateParams.module || {},
         courseId = $stateParams.courseid,
         quiz,
@@ -39,22 +39,17 @@ angular.module('mm.addons.mod_quiz')
         moreAttempts,
         scrollView = $ionicScrollDelegate.$getByHandle('mmaModQuizIndexScroll'),
         autoReview,
-        currentStatus,
-        statusObserver, obsFinished, syncObserver, onlineObserver;
+        currentStatus;
 
     $scope.title = module.name;
     $scope.description = module.description;
     $scope.moduleUrl = module.url;
-    $scope.moduleName = $mmCourse.translateModuleName('quiz');
+    $scope.isTablet = $ionicPlatform.isTablet();
     $scope.courseId = courseId;
     $scope.refreshIcon = 'spinner';
-    $scope.syncIcon = 'spinner';
-    $scope.component = mmaModQuizComponent;
-    $scope.componentId = module.id;
 
     // Convenience function to get Quiz data.
-    function fetchQuizData(refresh, showErrors) {
-        $scope.isOnline = $mmApp.isOnline();
+    function fetchQuizData(refresh) {
         return $mmaModQuiz.getQuiz(courseId, module.id).then(function(quizData) {
             quiz = quizData;
             quiz.gradeMethodReadable = $mmaModQuiz.getQuizGradeMethod(quiz.grademethod);
@@ -64,17 +59,17 @@ angular.module('mm.addons.mod_quiz')
             $scope.description = quiz.intro || $scope.description;
 
             // Try to get warnings from automatic sync.
-            return $mmaModQuizSync.getSyncWarnings(quiz.id).then(function(warnings) {
+            return $mmaModQuizSync.getQuizSyncWarnings(quiz.id).then(function(warnings) {
                 if (warnings && warnings.length) {
                     // Show warnings and delete them so they aren't shown again.
                     $mmUtil.showErrorModal($mmText.buildMessage(warnings));
-                    return $mmaModQuizSync.setSyncWarnings(quiz.id, []);
+                    return $mmaModQuizSync.setQuizSyncWarnings(quiz.id, []);
                 }
             });
         }).then(function() {
             if ($mmaModQuiz.isQuizOffline(quiz)) {
                 // Try to sync the quiz.
-                return syncQuiz(showErrors).catch(function() {
+                return syncQuiz(false).catch(function() {
                     // Ignore errors, keep getting data even if sync fails.
                     autoReview = undefined;
                 });
@@ -90,8 +85,8 @@ angular.module('mm.addons.mod_quiz')
                     $scope.syncTime = syncTime;
                 });
 
-                $mmaModQuizSync.hasDataToSync(quiz.id).then(function(hasOffline) {
-                    $scope.hasOffline = hasOffline;
+                $mmaModQuizSync.hasDataToSync(quiz.id).then(function(hasDataToSync) {
+                    $scope.showSyncButton = hasDataToSync;
                 });
             }
 
@@ -114,9 +109,6 @@ angular.module('mm.addons.mod_quiz')
 
         }).then(function() {
             $scope.quiz = quiz;
-
-            // All data obtained, now fill the context menu.
-            $mmCourseHelper.fillContextMenu($scope, module, courseId, refresh, mmaModQuizComponent);
         }).catch(function(message) {
             if (!refresh && !quiz) {
                 // Get quiz failed, retry without using cache since it might be a new activity.
@@ -193,10 +185,7 @@ angular.module('mm.addons.mod_quiz')
 
             // Get gradebook grade.
             return $mmaModQuiz.getGradeFromGradebook(courseId, module.id).then(function(data) {
-                gradebookData = {
-                    grade: data.gradeformatted,
-                    feedback: data.feedback
-                };
+                gradebookData = data;
             }).catch(function() {
                 // Fallback to quiz best grade if failure or not found.
                 gradebookData = {
@@ -382,8 +371,8 @@ angular.module('mm.addons.mod_quiz')
 
     // Get status of the quiz.
     function getStatus() {
-        var revision = $mmaModQuizPrefetchHandler.getRevisionFromAttempts(attempts),
-            timemodified = $mmaModQuizPrefetchHandler.getTimemodifiedFromAttempts(attempts);
+        var revision = $mmaModQuiz.getQuizRevisionFromAttempts(attempts),
+            timemodified = $mmaModQuiz.getQuizTimemodifiedFromAttempts(attempts);
 
         return $mmCoursePrefetchDelegate.getModuleStatus(module, courseId, revision, timemodified);
     }
@@ -406,7 +395,10 @@ angular.module('mm.addons.mod_quiz')
     // Showing or hide a status message depending on the SCORM status.
     function showStatus(status) {
         currentStatus = status;
-        $scope.showSpinner = status == mmCoreDownloading;
+
+        if (status == mmCoreDownloading) {
+            $scope.showSpinner = true;
+        }
     }
 
     // Fetch the Quiz data.
@@ -417,20 +409,39 @@ angular.module('mm.addons.mod_quiz')
     }).finally(function() {
         $scope.quizLoaded = true;
         $scope.refreshIcon = 'ion-refresh';
-        $scope.syncIcon = 'ion-loop';
     });
 
     // Pull to refresh.
-    $scope.refreshQuiz = function(showErrors) {
+    $scope.refreshQuiz = function() {
         if ($scope.quizLoaded) {
             $scope.refreshIcon = 'spinner';
-            $scope.syncIcon = 'spinner';
-            return refreshData(false, showErrors).finally(function() {
+            refreshData().finally(function() {
                 $scope.refreshIcon = 'ion-refresh';
-                $scope.syncIcon = 'ion-loop';
                 $scope.$broadcast('scroll.refreshComplete');
             });
         }
+    };
+
+    // Synchronize the quiz.
+    $scope.sync = function() {
+        if ($scope.showSpinner) {
+            // Scope is being or synchronized, abort.
+            return;
+        }
+
+        $scope.showSpinner = true;
+        syncQuiz(true).then(function() {
+            // Refresh the data.
+            $scope.quizLoaded = false;
+            $scope.refreshIcon = 'spinner';
+            scrollView.scrollTop();
+            refreshData(true).finally(function() {
+                $scope.quizLoaded = true;
+                $scope.refreshIcon = 'ion-refresh';
+            });
+        }).finally(function() {
+            $scope.showSpinner = false;
+        });
     };
 
     // Attempt the quiz.
@@ -445,16 +456,11 @@ angular.module('mm.addons.mod_quiz')
             if (currentStatus != mmCoreDownloaded) {
                 // Prefetch the quiz.
                 $scope.showSpinner = true;
-                return $mmaModQuizPrefetchHandler.prefetch(module, courseId, true).then(function() {
+                return $mmaModQuiz.prefetch(module, courseId, true).then(function() {
                     // Success downloading, open quiz.
                     openQuiz();
                 }).catch(function(error) {
-                    if ($scope.hasOffline) {
-                        // Error downloading but there is something offline, allow continuing it.
-                        openQuiz();
-                    } else {
-                        $mmUtil.showErrorModalDefault(error, 'mm.core.errordownloading', true);
-                    }
+                    $mmaModQuizHelper.showError(error, 'mma.mod_quiz.errordownloading');
                 }).finally(function() {
                     $scope.showSpinner = false;
                 });
@@ -467,19 +473,9 @@ angular.module('mm.addons.mod_quiz')
         }
     };
 
-    // Confirm and Remove action.
-    $scope.removeFiles = function() {
-        $mmCourseHelper.confirmAndRemove(module, courseId);
-    };
-
-    // Context Menu Prefetch action.
-    $scope.prefetch = function() {
-        $mmCourseHelper.contextMenuPrefetch($scope, module, courseId);
-    };
-
     // Context Menu Description action.
     $scope.expandDescription = function() {
-        $mmText.expandText($translate.instant('mm.core.description'), $scope.description, false, mmaModQuizComponent, module.id);
+        $mmText.expandText($translate.instant('mm.core.description'), $scope.description);
     };
 
 
@@ -505,13 +501,11 @@ angular.module('mm.addons.mod_quiz')
             // Refresh data.
             $scope.quizLoaded = false;
             $scope.refreshIcon = 'spinner';
-            $scope.syncIcon = 'spinner';
             scrollView.scrollTop();
             promise.then(function() {
                 refreshData().finally(function() {
                     $scope.quizLoaded = true;
                     $scope.refreshIcon = 'ion-refresh';
-                    $scope.syncIcon = 'ion-loop';
                 });
             });
         } else {
@@ -523,13 +517,8 @@ angular.module('mm.addons.mod_quiz')
         autoReview = undefined;
     });
 
-    // Refresh online status when changes.
-    onlineObserver = $mmEvents.on(mmCoreEventOnlineStatusChanged, function(online) {
-        $scope.isOnline = online;
-    });
-
     // Listen for attempt finished events.
-    obsFinished = $mmEvents.on(mmaModQuizEventAttemptFinished, function(data) {
+    var obsFinished = $mmEvents.on(mmaModQuizEventAttemptFinished, function(data) {
         // Go to review attempt if an attempt in this quiz was finished and synced.
         if (data.quizId === quiz.id) {
             autoReview = data;
@@ -537,16 +526,14 @@ angular.module('mm.addons.mod_quiz')
     });
 
     // Refresh data if this quiz is synchronized automatically.
-    syncObserver = $mmEvents.on(mmaModQuizEventAutomSynced, function(data) {
+    var syncObserver = $mmEvents.on(mmaModQuizEventAutomSynced, function(data) {
         if (data && data.siteid == $mmSite.getId() && data.quizid == quiz.id) {
             $scope.quizLoaded = false;
             $scope.refreshIcon = 'spinner';
-            $scope.syncIcon = 'spinner';
             scrollView.scrollTop();
             fetchQuizData().finally(function() {
                 $scope.quizLoaded = true;
                 $scope.refreshIcon = 'ion-refresh';
-                $scope.syncIcon = 'ion-loop';
             });
 
             if (data.attemptFinished) {
@@ -557,10 +544,12 @@ angular.module('mm.addons.mod_quiz')
     });
 
     $scope.$on('$destroy', function() {
-        obsFinished && obsFinished.off && obsFinished.off();
-        syncObserver && syncObserver.off && syncObserver.off();
-        statusObserver && statusObserver.off && statusObserver.off();
-        onlineObserver && onlineObserver.off && onlineObserver.off();
+        if (obsFinished && obsFinished.off) {
+            obsFinished.off();
+        }
+        if (syncObserver && syncObserver.off) {
+            syncObserver.off();
+        }
     });
 
 });

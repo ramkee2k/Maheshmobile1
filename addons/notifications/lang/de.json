@@ -1,7 +1,5 @@
 {
-    "errorgetnotifications": "Fehler beim Laden der Mitteilungen",
-    "notificationpreferences": "Systemmitteilungen",
-    "notifications": "Systemmitteilungen",
-    "playsound": "Audio abspielen",
+    "errorgetnotifications": "Fehler beim Abrufen von Mitteilungen",
+    "notifications": "Mitteilungen",
     "therearentnotificationsyet": "Keine Mitteilungen"
 }

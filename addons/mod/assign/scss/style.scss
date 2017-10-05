@@ -1,20 +1,18 @@
 
-$mma-mod-assign-warning-color: $red !default;
+$mma-mod-assign-warning-color:      #c00 !default;
 
-.mm-site_mod_assign,
-.mm-site_mod_assign-submission {
+.mm-site_mod_assign {
 
-  div.latesubmission,
-  div.overdue {
-    @extend .mm-error-item;
+  div.latesubmission {
+    background-color: #efcfcf;
   }
 
   div.earlysubmission {
-    @extend .mm-success-item;
+    background-color: #cfefcf;
   }
 
-  div.submissioneditable p {
-    color: $red;
+  div.submissioneditable {
+    color: red;
   }
 }
 
@@ -32,11 +30,11 @@ p.mma-mod-assign-warning {
   padding-bottom: 1.5em;
 
   .criterion {
-    border: 1px solid $item-default-border;
+    border: 1px solid #DDD;
     overflow: hidden;
 
     &.even {
-      background: $gray-lighter;
+      background: #F0F0F0;
     }
 
     .description,
@@ -70,7 +68,7 @@ p.mma-mod-assign-warning {
     }
 
     .levels .level {
-      border-left: 1px solid $item-default-border;
+      border-left: 1px solid #DDD;
       max-width: 150px;
     }
 
@@ -79,12 +77,12 @@ p.mma-mod-assign-warning {
     }
 
     .levels .level.last {
-      border-right: 1px solid $item-default-border;
+      border-right: 1px solid #DDD;
     }
 
     .levels .level .score {
       font-style: italic;
-      color: $green-dark;
+      color: #575;
       font-weight: bold;
       margin-top: 5px;
       white-space: nowrap;
@@ -99,7 +97,7 @@ p.mma-mod-assign-warning {
     }
 
     .levels .level.checked {
-      background: $green-light;
+      background: #d0ffd0;
     }
 
     .description.error,
@@ -109,7 +107,7 @@ p.mma-mod-assign-warning {
     }
 
     .levels.error {
-      border: 1px solid $red;
+      border: 1px solid red;
     }
   }
 
@@ -136,14 +134,13 @@ p.mma-mod-assign-warning {
 
   .criteria {
     height:100%;
-    background: $white;
   }
 }
 
 .gradingform_rubric-regrade {
   padding: 10px;
   background: #FFDDDD;
-  border: 1px solid $red;
+  border: 1px solid #F00;
   margin-bottom: 10px;
 }
 .gradingform_rubric-restored {
@@ -153,7 +150,7 @@ p.mma-mod-assign-warning {
   margin-bottom: 10px;
 }
 .gradingform_rubric-error {
-  color: $red;
+  color: red;
   font-weight: bold;
 }
 
@@ -172,7 +169,7 @@ p.mma-mod-assign-warning {
   }
 
   .criterion {
-    border: 1px solid $item-default-border;
+    border: 1px solid #DDD;
     overflow: hidden;
 
     .description,
@@ -181,7 +178,7 @@ p.mma-mod-assign-warning {
     }
 
     &.even {
-      background: $gray-lighter;
+      background: #F0F0F0;
     }
 
     .description {

@@ -25,23 +25,10 @@ angular.module('mm.addons.remotestyles', [])
 })
 
 .run(function($mmEvents, mmCoreEventLogin, mmCoreEventLogout, mmCoreEventSiteAdded, mmCoreEventSiteUpdated, $mmaRemoteStyles,
-            $mmSite, mmCoreEventSiteDeleted, mmCoreLoginSiteCheckedEvent, mmCoreLoginSiteUncheckedEvent) {
-    var addingSite,
-        unloadTmpStyles;
+            $mmSite, mmCoreEventSiteDeleted) {
 
     $mmEvents.on(mmCoreEventSiteAdded, function(siteId) {
-        addingSite = siteId;
-
-        $mmaRemoteStyles.addSite(siteId).finally(function() {
-            if (addingSite == siteId) {
-                addingSite = false;
-            }
-
-            if (unloadTmpStyles == siteId) {
-                // This site had some tmp styles loaded, unload them.
-                $mmaRemoteStyles.unloadTmpStyles();
-            }
-        });
+        $mmaRemoteStyles.addSite(siteId);
     });
     $mmEvents.on(mmCoreEventSiteUpdated, function(siteId) {
         // Load only if current site was updated.
@@ -59,21 +46,5 @@ angular.module('mm.addons.remotestyles', [])
     // Remove site styles on logout.
     $mmEvents.on(mmCoreEventSiteDeleted, function(site) {
         $mmaRemoteStyles.removeSite(site.id);
-    });
-
-    // Load temporary styles when site config is checked in login.
-    $mmEvents.on(mmCoreLoginSiteCheckedEvent, function(data) {
-        $mmaRemoteStyles.loadTmpStyles(data.config.mobilecssurl);
-    });
-
-    // Unload temporary styles when site config is "unchecked" in login.
-    $mmEvents.on(mmCoreLoginSiteUncheckedEvent, function(data) {
-        if (data.siteid && data.siteid == addingSite) {
-            // The tmp styles are from a site that is being added. Wait for the site styles to be loaded before removing
-            // the tmp styles so there is no blink effect.
-            unloadTmpStyles = data.siteid;
-        } else {
-            $mmaRemoteStyles.unloadTmpStyles();
-        }
     });
 });

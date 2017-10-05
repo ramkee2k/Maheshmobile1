@@ -8,6 +8,5 @@
     "personalnotes": "Osobní poznámky",
     "publishstate": "Kontext",
     "sitenotes": "Poznámky stránek",
-    "userwithid": "Uživatel s ID {{id}}",
-    "warningnotenotsent": "Nelze přidat poznámku (y) ke  kurzu {{course}}. {{error}}"
+    "userwithid": "Uživatel s ID {{id}}"
 }

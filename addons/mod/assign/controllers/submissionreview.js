@@ -21,48 +21,30 @@ angular.module('mm.addons.mod_assign')
  * @ngdoc controller
  * @name mmaModAssignSubmissionReviewCtrl
  */
-.controller('mmaModAssignSubmissionReviewCtrl', function($scope, $stateParams, $q, $mmaModAssign, $mmCourse, $mmEvents,
-        mmaModAssignSubmissionInvalidatedEvent, mmaModAssignEventSubmitGrade) {
-    var assign,
-        blindMarking;
+.controller('mmaModAssignSubmissionReviewCtrl', function($scope, $stateParams, $mmUser, $q, $mmaModAssign,
+        mmaModAssignSubmissionInvalidatedEvent) {
+    var assign;
 
     $scope.courseid = $stateParams.courseid;
     $scope.moduleid = $stateParams.moduleid;
     $scope.submitid = $stateParams.submitid;
     $scope.blindid = $stateParams.blindid;
-    $scope.showSubmission = typeof $stateParams.showSubmission != 'undefined' ? $stateParams.showSubmission : true;
 
     function fetchSubmission() {
         return $mmaModAssign.getAssignment($scope.courseid, $scope.moduleid).then(function(assignment) {
             assign = assignment;
-            $scope.title = assign.name;
 
-            blindMarking = assign.blindmarking && !assign.revealidentities;
+            $scope.blindMarking = assign.blindmarking && !assign.revealidentities;
 
-            return $mmaModAssign.isGradingEnabled().then(function(enabled) {
-                if (enabled) {
-                    return $mmCourse.getModuleBasicGradeInfo($scope.moduleid).then(function(gradeInfo) {
-                        if (gradeInfo) {
-                            // Grades can be saved if simple grading.
-                            if (gradeInfo.advancedgrading && gradeInfo.advancedgrading[0] &&
-                                    typeof gradeInfo.advancedgrading[0].method != 'undefined') {
-                                var method = gradeInfo.advancedgrading[0].method || 'simple';
-                                $scope.canSaveGrades = method == 'simple';
-                            } else {
-                                $scope.canSaveGrades = true;
-                            }
-                        }
-                    });
-                }
-            });
+            if (!$scope.blindMarking) {
+                return $mmUser.getProfile($scope.submitid, $scope.courseid).then(function(profile) {
+                    $scope.user = profile;
+                });
+            }
+
+            return $q.when();
         });
     }
-
-    // Submit grade action.
-    $scope.submitGrade = function() {
-        // Call trigger to save.
-        $mmEvents.trigger(mmaModAssignEventSubmitGrade);
-    };
 
     // Convenience function to refresh all the data.
     function refreshAllData() {
@@ -70,7 +52,7 @@ angular.module('mm.addons.mod_assign')
         if (assign) {
             promises.push($mmaModAssign.invalidateSubmissionData(assign.id));
             promises.push($mmaModAssign.invalidateAssignmentUserMappingsData(assign.id));
-            promises.push($mmaModAssign.invalidateSubmissionStatusData(assign.id, $scope.submitid, blindMarking));
+            promises.push($mmaModAssign.invalidateSubmissionStatusData(assign.id, $scope.submitid, $scope.blindMarking));
         }
         return $q.all(promises).finally(function() {
             $scope.$broadcast(mmaModAssignSubmissionInvalidatedEvent);

@@ -14,25 +14,23 @@
 
 angular.module('mm.core.fileuploader', ['mm.core'])
 
-.constant('mmFileUploaderAlbumPriority', 2000)
-.constant('mmFileUploaderCameraPriority', 1800)
-.constant('mmFileUploaderAudioPriority', 1600)
-.constant('mmFileUploaderVideoPriority', 1400)
-.constant('mmFileUploaderFilePriority', 1200)
+.config(function($stateProvider) {
 
-.config(function($mmFileUploaderDelegateProvider, mmFileUploaderAlbumPriority, mmFileUploaderCameraPriority,
-            mmFileUploaderAudioPriority, mmFileUploaderVideoPriority, mmFileUploaderFilePriority) {
-    // Register fileuploader handlers.
-    $mmFileUploaderDelegateProvider.registerHandler('mmFileUploaderAlbum',
-                '$mmFileUploaderHandlers.albumFilePicker', mmFileUploaderAlbumPriority);
-    $mmFileUploaderDelegateProvider.registerHandler('mmFileUploaderCamera',
-                '$mmFileUploaderHandlers.cameraFilePicker', mmFileUploaderCameraPriority);
-    $mmFileUploaderDelegateProvider.registerHandler('mmFileUploaderAudio',
-                '$mmFileUploaderHandlers.audioFilePicker', mmFileUploaderAudioPriority);
-    $mmFileUploaderDelegateProvider.registerHandler('mmFileUploaderVideo',
-                '$mmFileUploaderHandlers.videoFilePicker', mmFileUploaderVideoPriority);
-    $mmFileUploaderDelegateProvider.registerHandler('mmFileUploaderFile',
-                '$mmFileUploaderHandlers.filePicker', mmFileUploaderFilePriority);
+    $stateProvider
+
+    .state('site.fileuploader-picker', {
+        url: '/fileuploader-picker',
+        params: {
+            maxsize: -1,
+            upload: true // True if file should be uploaded, false to only pick the file.
+        },
+        views: {
+            'site': {
+                templateUrl: 'core/components/fileuploader/templates/picker.html',
+                controller: 'mmFileUploaderPickerCtrl'
+            }
+        }
+    });
 })
 
 .run(function($mmEvents, mmCoreEventLogin, mmCoreEventSiteUpdated, mmCoreEventLogout, $mmFileUploaderDelegate,

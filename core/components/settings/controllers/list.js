@@ -21,8 +21,6 @@ angular.module('mm.core.settings')
  * @ngdoc controller
  * @name mmSettingsListCtrl
  */
-.controller('mmSettingsListCtrl', function($scope, $mmSettingsDelegate) {
+.controller('mmSettingsListCtrl', function($scope) {
     $scope.isIOS = ionic.Platform.isIOS();
-    $scope.handlers = $mmSettingsDelegate.getHandlers();
-    $scope.areHandlersLoaded = $mmSettingsDelegate.areHandlersLoaded;
 });

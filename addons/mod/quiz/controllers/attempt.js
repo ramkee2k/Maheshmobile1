@@ -21,7 +21,7 @@ angular.module('mm.addons.mod_quiz')
  * @ngdoc controller
  * @name mmaModQuizAttemptCtrl
  */
-.controller('mmaModQuizAttemptCtrl', function($scope, $stateParams, $mmaModQuiz, $q, $mmaModQuizHelper, mmaModQuizComponent) {
+.controller('mmaModQuizAttemptCtrl', function($scope, $stateParams, $mmaModQuiz, $q, $mmaModQuizHelper) {
     var attemptId = $stateParams.attemptid,
         quizId = $stateParams.quizid,
         courseId = $stateParams.courseid,
@@ -35,8 +35,6 @@ angular.module('mm.addons.mod_quiz')
         return $mmaModQuiz.getQuizById(courseId, quizId).then(function(quizData) {
             quiz = quizData;
             $scope.quiz = quiz;
-            $scope.component = mmaModQuizComponent;
-            $scope.componentId = quiz.coursemodule;
 
             return fetchAttempt();
         }).catch(function(message) {

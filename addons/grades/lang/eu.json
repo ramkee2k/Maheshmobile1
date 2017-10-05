@@ -1,4 +1,14 @@
 {
-    "nogradesreturned": "Ez da kalifikaziorik itzuli",
-    "viewgrades": "Ikusi kalifikazioak"
+    "average": "Batezbestekoa",
+    "contributiontocoursetotal": "Ikastarora guztira egindako ekarpena",
+    "feedback": "Feedback-a",
+    "grade": "Kalifikazioa",
+    "grades": "Kalifikazioak",
+    "itemname": "Elementua kalifikatu",
+    "lettergrade": "Letren bidezko kalifikazioa",
+    "percentage": "Ehunekoa",
+    "range": "Tartea",
+    "rank": "Sailkapena",
+    "viewgrades": "Kalifikazioak ikusi",
+    "weight": "Pisua"
 }

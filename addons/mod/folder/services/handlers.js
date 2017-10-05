@@ -21,9 +21,9 @@ angular.module('mm.addons.mod_folder')
  * @ngdoc service
  * @name $mmaModFolderHandlers
  */
-.factory('$mmaModFolderHandlers', function($mmCourse, $mmEvents, $state, $mmSite, $mmCourseHelper, $mmaModFolder,
+.factory('$mmaModFolderHandlers', function($mmCourse, $mmaModFolder, $mmEvents, $state, $mmSite, $mmCourseHelper, $mmFilepool,
             $mmCoursePrefetchDelegate, mmCoreDownloading, mmCoreNotDownloaded, mmCoreOutdated, mmCoreEventPackageStatusChanged,
-            mmaModFolderComponent, $mmContentLinksHelper, $mmaModFolderPrefetchHandler, $mmUtil) {
+            mmaModFolderComponent, $mmContentLinksHelper, $q, $mmaModFolderPrefetchHandler) {
     var self = {};
 
     /**
@@ -62,42 +62,18 @@ angular.module('mm.addons.mod_folder')
         self.getController = function(module, courseid, sectionid) {
             return function($scope) {
                 var downloadBtn,
-                    refreshBtn;
+                    refreshBtn,
+                    revision = $mmFilepool.getRevisionFromFileList(module.contents),
+                    timemodified = $mmFilepool.getTimemodifiedFromFileList(module.contents);
 
                 // Prefetch folder contents.
                 function prefetchFolder(e) {
                     e.preventDefault();
                     e.stopPropagation();
 
-                    var dwnBtnHidden = downloadBtn.hidden,
-                        rfrshBtnHidden = refreshBtn.hidden;
-
-                    // Show spinner since this operation might take a while.
-                    $scope.spinner = true;
-                    downloadBtn.hidden = true;
-                    refreshBtn.hidden = true;
-
-                    // Get download size to ask for confirm if it's high.
-                    $mmaModFolderPrefetchHandler.getDownloadSize(module, courseid).then(function(size) {
-                        $mmCourseHelper.prefetchModule($scope, $mmaModFolderPrefetchHandler, module, size, false, courseid)
-                                .catch(function() {
-                            // Error or cancelled, leave the buttons as they were.
-                            $scope.spinner = false;
-                            downloadBtn.hidden = dwnBtnHidden;
-                            refreshBtn.hidden = rfrshBtnHidden;
-                        });
-                    }).catch(function(error) {
-                        // Error, leave the buttons as they were.
-                        $scope.spinner = false;
-                        downloadBtn.hidden = dwnBtnHidden;
-                        refreshBtn.hidden = rfrshBtnHidden;
-
-                        if (error) {
-                            $mmUtil.showErrorModal(error);
-                        } else {
-                            $mmUtil.showErrorModal('mm.core.errordownloading', true);
-                        }
-                    });
+                    // Check size and show confirmation if needed.
+                    var size = $mmaModFolderPrefetchHandler.getDownloadSize(module);
+                    $mmCourseHelper.prefetchModule($scope, $mmaModFolder, module, size, false);
                 }
 
                 downloadBtn = {
@@ -145,7 +121,7 @@ angular.module('mm.addons.mod_folder')
                 });
 
                 // Get current status to decide which icon should be shown.
-                $mmCoursePrefetchDelegate.getModuleStatus(module, courseid).then(showStatus);
+                $mmCoursePrefetchDelegate.getModuleStatus(module, courseid, revision, timemodified).then(showStatus);
 
                 $scope.$on('$destroy', function() {
                     statusObserver && statusObserver.off && statusObserver.off();
@@ -163,7 +139,56 @@ angular.module('mm.addons.mod_folder')
      * @ngdoc method
      * @name $mmaModFolderHandlers#linksHandler
      */
-    self.linksHandler = $mmContentLinksHelper.createModuleIndexLinkHandler('mmaModFolder', 'folder', $mmaModFolder);
+    self.linksHandler = function() {
+
+        var self = {};
+
+        /**
+         * Whether or not the handler is enabled for a certain site.
+         *
+         * @param  {String} siteId     Site ID.
+         * @param  {Number} [courseId] Course ID related to the URL.
+         * @return {Promise}           Promise resolved with true if enabled.
+         */
+        function isEnabled(siteId, courseId) {
+            if (courseId) {
+                return $q.when(true);
+            }
+            return $mmCourse.canGetModuleWithoutCourseId(siteId);
+        }
+
+        /**
+         * Get actions to perform with the link.
+         *
+         * @param {String[]} siteIds  Site IDs the URL belongs to.
+         * @param {String} url        URL to treat.
+         * @param {Number} [courseId] Course ID related to the URL.
+         * @return {Promise}          Promise resolved with the list of actions.
+         *                            See {@link $mmContentLinksDelegate#registerLinkHandler}.
+         */
+        self.getActions = function(siteIds, url, courseId) {
+            // Check it's a folder URL.
+            if (typeof self.handles(url) != 'undefined') {
+                return $mmContentLinksHelper.treatModuleIndexUrl(siteIds, url, isEnabled, courseId);
+            }
+            return $q.when([]);
+        };
+
+        /**
+         * Check if the URL is handled by this handler. If so, returns the URL of the site.
+         *
+         * @param  {String} url URL to check.
+         * @return {String}     Site URL. Undefined if the URL doesn't belong to this handler.
+         */
+        self.handles = function(url) {
+            var position = url.indexOf('/mod/folder/view.php');
+            if (position > -1) {
+                return url.substr(0, position);
+            }
+        };
+
+        return self;
+    };
 
     return self;
 });

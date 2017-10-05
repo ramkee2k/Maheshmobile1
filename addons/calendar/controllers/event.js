@@ -21,7 +21,7 @@ angular.module('mm.addons.calendar')
  * @ngdoc controller
  * @name mmaCalendarEventCtrl
  */
-.controller('mmaCalendarEventCtrl', function($scope, $log, $stateParams, $mmaCalendar, $mmUtil, $mmCourse, $mmCourses, $translate,
+.controller('mmaCalendarEventCtrl', function($scope, $log, $stateParams, $mmaCalendar, $mmUtil, $mmCourse, $mmCourses,
         $mmLocalNotifications) {
 
     $log = $log.getInstance('mmaCalendarEventCtrl');
@@ -37,10 +37,11 @@ angular.module('mm.addons.calendar')
 
             if (e.moduleicon) {
                 // It's a module event, translate the module name to the current language.
-                var name = $mmCourse.translateModuleName(e.modulename);
-                if (name.indexOf('mm.core.mod') === -1) {
-                    e.modulename = name;
-                }
+                $mmCourse.translateModuleName(e.modulename).then(function(name) {
+                    if (name.indexOf('mm.core.mod') === -1) {
+                        e.modulename = name;
+                    }
+                });
             }
 
             if (e.courseid > 1) {
@@ -74,23 +75,14 @@ angular.module('mm.addons.calendar')
     $scope.notificationsEnabled = $mmLocalNotifications.isAvailable();
     if ($scope.notificationsEnabled) {
 
-        $mmaCalendar.getEventNotificationTimeOption(eventid).then(function(notificationtime) {
+        $mmaCalendar.getEventNotificationTime(eventid).then(function(notificationtime) {
             $scope.notification = { // Use an object, otherwise changes are not reflected.
                 time: String(notificationtime)
             };
         });
 
-        $mmaCalendar.getDefaultNotificationTime().then(function(defaultTime) {
-            if (defaultTime === 0) {
-                // Disabled by default.
-                $scope.defaultTimeReadable = $translate.instant('mm.settings.disabled');
-            } else {
-                $scope.defaultTimeReadable = moment.duration(defaultTime * 60 * 1000).humanize();
-            }
-        });
-
         $scope.updateNotificationTime = function() {
-            var time = parseInt($scope.notification.time, 10);
+            var time = parseInt($scope.notification.time);
             if (!isNaN(time) && $scope.event && $scope.event.id) {
                 $mmaCalendar.updateNotificationTime($scope.event, time);
             }

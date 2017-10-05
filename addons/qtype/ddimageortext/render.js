@@ -157,7 +157,7 @@ angular.module('mm.addons.qtype_ddimageortext')
                             }
                         }
                     }
-                    console.warn('Qtype ddimageortext: Prefix "' + prefix + '" not found in class names.');
+                    throw 'Prefix "' + prefix + '" not found in class names.';
                 },
                 clone_new_drag_item : function (draginstanceno, dragitemno) {
                     var drag, divdrag;

@@ -1,8 +1,6 @@
 {
-    "appsettings": "تنظیمات برنامه",
     "changesite": "خروج",
     "help": "راهنما",
-    "logout": "خروج",
-    "mycourses": "درس‌های من",
+    "mycourses": "درسهای من",
     "website": "پایگاه اینترنتی"
 }

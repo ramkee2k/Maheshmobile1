@@ -21,7 +21,7 @@ angular.module('mm.addons.mod_url')
  * @ngdoc service
  * @name $mmaModUrlHandlers
  */
-.factory('$mmaModUrlHandlers', function($mmCourse, $mmaModUrl, $state, $mmContentLinksHelper) {
+.factory('$mmaModUrlHandlers', function($mmCourse, $mmaModUrl, $state, $mmUtil, $mmContentLinksHelper, $q) {
 
     var self = {};
 
@@ -48,10 +48,10 @@ angular.module('mm.addons.mod_url')
          * Get the controller.
          *
          * @param {Object} module The module info.
-         * @param {Number} courseId The course ID.
+         * @param {Number} courseid The course ID.
          * @return {Function}
          */
-        self.getController = function(module, courseId) {
+        self.getController = function(module, courseid) {
             return function($scope) {
                 $scope.icon = $mmCourse.getModuleIconSrc('url');
                 $scope.title = module.name;
@@ -61,31 +61,25 @@ angular.module('mm.addons.mod_url')
                         e.preventDefault();
                         e.stopPropagation();
                     }
-                    $state.go('site.mod_url', {module: module, courseid: courseId});
+                    $state.go('site.mod_url', {module: module, courseid: courseid});
                 };
 
-                // Get contents.
-                $scope.spinner = true;
-                $mmCourse.loadModuleContents(module, courseId).then(function() {
-                    if (module.contents && module.contents[0] && module.contents[0].fileurl) {
-                        $scope.buttons = [{
-                            icon: 'ion-link',
-                            label: 'mm.core.openinbrowser',
-                            action: function(e) {
-                                if (e) {
-                                    e.preventDefault();
-                                    e.stopPropagation();
-                                }
-                                $mmaModUrl.logView(module.instance).then(function() {
-                                    $mmCourse.checkModuleCompletion(courseId, module.completionstatus);
-                                });
-                                $mmaModUrl.open(module.contents[0].fileurl);
+                if (module.contents && module.contents[0] && module.contents[0].fileurl) {
+                    $scope.buttons = [{
+                        icon: 'ion-link',
+                        label: 'mm.core.openinbrowser',
+                        action: function(e) {
+                            if (e) {
+                                e.preventDefault();
+                                e.stopPropagation();
                             }
-                        }];
-                    }
-                }).finally(function() {
-                    $scope.spinner = false;
-                });
+                            $mmaModUrl.logView(module.instance).then(function() {
+                                $mmCourse.checkModuleCompletion(courseid, module.completionstatus);
+                            });
+                            $mmaModUrl.open(module.contents[0].fileurl);
+                        }
+                    }];
+                }
             };
         };
 
@@ -99,7 +93,56 @@ angular.module('mm.addons.mod_url')
      * @ngdoc method
      * @name $mmaModUrlHandlers#linksHandler
      */
-    self.linksHandler = $mmContentLinksHelper.createModuleIndexLinkHandler('mmaModUrl', 'url', $mmaModUrl);
+    self.linksHandler = function() {
+
+        var self = {};
+
+        /**
+         * Whether or not the handler is enabled for a certain site.
+         *
+         * @param  {String} siteId     Site ID.
+         * @param  {Number} [courseId] Course ID related to the URL.
+         * @return {Promise}           Promise resolved with true if enabled.
+         */
+        function isEnabled(siteId, courseId) {
+            if (courseId) {
+                return $q.when(true);
+            }
+            return $mmCourse.canGetModuleWithoutCourseId(siteId);
+        }
+
+        /**
+         * Get actions to perform with the link.
+         *
+         * @param {String[]} siteIds  Site IDs the URL belongs to.
+         * @param {String} url        URL to treat.
+         * @param {Number} [courseId] Course ID related to the URL.
+         * @return {Promise}          Promise resolved with the list of actions.
+         *                            See {@link $mmContentLinksDelegate#registerLinkHandler}.
+         */
+        self.getActions = function(siteIds, url, courseId) {
+            // Check it's a mod_url URL.
+            if (typeof self.handles(url) != 'undefined') {
+                return $mmContentLinksHelper.treatModuleIndexUrl(siteIds, url, isEnabled, courseId);
+            }
+            return $q.when([]);
+        };
+
+        /**
+         * Check if the URL is handled by this handler. If so, returns the URL of the site.
+         *
+         * @param  {String} url URL to check.
+         * @return {String}     Site URL. Undefined if the URL doesn't belong to this handler.
+         */
+        self.handles = function(url) {
+            var position = url.indexOf('/mod/url/view.php');
+            if (position > -1) {
+                return url.substr(0, position);
+            }
+        };
+
+        return self;
+    };
 
     return self;
 });

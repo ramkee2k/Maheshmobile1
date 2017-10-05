@@ -14,8 +14,6 @@
 
 angular.module('mm.addons.mod_url', ['mm.core'])
 
-.constant('mmaModUrlComponent', 'mmaModUrl')
-
 .config(function($stateProvider) {
 
     $stateProvider

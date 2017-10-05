@@ -21,36 +21,14 @@ angular.module('mm.addons.mod_assign')
  * @ngdoc service
  * @name $mmaModAssignSubmissionOnlinetextHandler
  */
-.factory('$mmaModAssignSubmissionOnlinetextHandler', function($mmSite, $mmaModAssign, $q, $mmaModAssignHelper, $mmWS, $mmText,
-            $mmaModAssignOffline, $mmUtil) {
+.factory('$mmaModAssignSubmissionOnlinetextHandler', function($mmSite, $mmaModAssign, $q, $mmaModAssignHelper, $mmWS, $mmText) {
 
     var self = {};
-
-    /**
-     * Check if the plugin can be edited in offline for existing submissions.
-     * In general, this should return false if the plugin uses Moodle filters. The reason is that the app only prefetches
-     * filtered data, and the user should edit unfiltered data.
-     *
-     * @module mm.addons.mod_assign
-     * @ngdoc method
-     * @name $mmaModAssignSubmissionOnlinetextHandler#canEditOffline
-     * @param  {Object} assign     Assignment.
-     * @param  {Object} submission Submission.
-     * @param  {Object} plugin     Plugin.
-     * @return {Boolean}           Whether the plugin can be edited in offline for existing submissions.
-     */
-    self.canEditOffline = function(assign, submission, plugin) {
-        // This plugin uses Moodle filters, it cannot be edited in offline.
-        return false;
-    };
 
     /**
      * Function meant to copy a submission.
      * Should add to pluginData the data to send to server based in the data in plugin (previous attempt).
      *
-     * @module mm.addons.mod_assign
-     * @ngdoc method
-     * @name $mmaModAssignSubmissionOnlinetextHandler#copySubmissionData
      * @param  {Object} assign     Assignment.
      * @param  {Object} plugin     Plugin data of the previous submission (the one to get the data from).
      * @param  {Object} pluginData Object where to add the plugin data.
@@ -82,9 +60,6 @@ angular.module('mm.addons.mod_assign')
      * Get files used by this plugin.
      * The files returned by this function will be prefetched when the user prefetches the assign.
      *
-     * @module mm.addons.mod_assign
-     * @ngdoc method
-     * @name $mmaModAssignSubmissionOnlinetextHandler#getPluginFiles
      * @param  {Object} assign     Assignment.
      * @param  {Object} submission Submission to check data.
      * @param  {Object} plugin     Plugin.
@@ -98,9 +73,6 @@ angular.module('mm.addons.mod_assign')
     /**
      * Get the size of data (in bytes) this plugin will send to copy a previous attempt.
      *
-     * @module mm.addons.mod_assign
-     * @ngdoc method
-     * @name $mmaModAssignSubmissionOnlinetextHandler#getSizeForCopy
      * @param  {Object} assign Assignment.
      * @param  {Object} plugin Plugin data of the previous submission (the one to get the data from).
      * @return {Promise}       Promise resolved with the size.
@@ -135,9 +107,6 @@ angular.module('mm.addons.mod_assign')
     /**
      * Get the size of data (in bytes) this plugin will send to add or edit a submission.
      *
-     * @module mm.addons.mod_assign
-     * @ngdoc method
-     * @name $mmaModAssignSubmissionOnlinetextHandler#getSizeForEdit
      * @param  {Object} assign     Assignment.
      * @param  {Object} submission Submission to check data.
      * @param  {Object} plugin     Plugin to get the data for.
@@ -152,10 +121,7 @@ angular.module('mm.addons.mod_assign')
     /**
      * Whether or not the plugin is enabled for the site.
      *
-     * @module mm.addons.mod_assign
-     * @ngdoc method
-     * @name $mmaModAssignSubmissionOnlinetextHandler#isEnabled
-     * @return {Boolean} Whether the plugin is enabled.
+     * @return {Boolean}
      */
     self.isEnabled = function() {
         return true;
@@ -166,23 +132,20 @@ angular.module('mm.addons.mod_assign')
      * This should return true if the plugin has no submission component (allow_submissions=false),
      * otherwise the user won't be able to edit submissions at all.
      *
-     * @module mm.addons.mod_assign
-     * @ngdoc method
-     * @name $mmaModAssignSubmissionOnlinetextHandler#isEnabledForEdit
-     * @return {Boolean} Whether the plugin is enabled.
+     * @return {Boolean}
      */
     self.isEnabledForEdit = function() {
         // There's a bug in Moodle 3.1.0 that doesn't allow submitting HTML, so we'll disable this plugin in that case.
-        // Bug was fixed in 3.1.1 minor release and in 3.2.
-        return $mmSite.isVersionGreaterEqualThan('3.1.1') || $mmSite.checkIfAppUsesLocalMobile();
+        // Bug was fixed in 3.1.1 minor release (2016052301) and in master version 2016070700.
+        var version = parseInt($mmSite.getInfo().version, 10),
+            localMobileEnabled = $mmSite.checkIfAppUsesLocalMobile();
+
+        return (version >= 2016052301 && version < 2016052400) || version >= 2016070700 || localMobileEnabled;
     };
 
     /**
      * Get the name of the directive to render this plugin.
      *
-     * @module mm.addons.mod_assign
-     * @ngdoc method
-     * @name $mmaModAssignSubmissionOnlinetextHandler#getDirectiveName
      * @param  {Object} plugin Plugin to get the directive for.
      * @param  {Boolean} edit  True if editing a submission, false if read only.
      * @return {String} Directive name.
@@ -194,41 +157,24 @@ angular.module('mm.addons.mod_assign')
     /**
      * Should prepare and add to pluginData the data to send to server based in the input data.
      *
-     * @module mm.addons.mod_assign
-     * @ngdoc method
-     * @name $mmaModAssignSubmissionOnlinetextHandler#prepareSubmissionData
      * @param  {Object} assign     Assignment.
      * @param  {Object} submission Submission to check data.
      * @param  {Object} plugin     Plugin to get the data for.
      * @param  {Object} inputData  Data entered in the submission form.
      * @param  {Object} pluginData Object where to add the plugin data.
-     * @param  {Boolean} offline   True to prepare the data for an offline submission, false otherwise.
-     * @param  {Number} [userId]   User ID. If not defined, site's current user.
-     * @param  {String} [siteId]   Site ID. If not defined, current site.
      * @return {Void}
      */
-    self.prepareSubmissionData = function(assign, submission, plugin, inputData, pluginData, offline, userId, siteId) {
-        return $mmUtil.isRichTextEditorEnabled().then(function(enabled) {
-            var text = getTextToSubmit(plugin, inputData);
-            if (!enabled) {
-                // Rich text editor not enabled, add some HTML to the text if needed.
-                text = $mmText.formatHtmlLines(text);
-            }
-
-            pluginData.onlinetext_editor = {
-                text: text,
-                format: 1,
-                itemid: 0 // Can't add new files yet, so we use a fake itemid.
-            };
-        });
+    self.prepareSubmissionData = function(assign, submission, plugin, inputData, pluginData) {
+        pluginData.onlinetext_editor = {
+            text: getTextToSubmit(plugin, inputData),
+            format: 1,
+            itemid: 0 // Can't add new files yet, so we use a fake itemid.
+        };
     };
 
     /**
      * Check if the submission data has changed for this plugin.
      *
-     * @module mm.addons.mod_assign
-     * @ngdoc method
-     * @name $mmaModAssignSubmissionOnlinetextHandler#hasDataChanged
      * @param  {Object} assign     Assignment.
      * @param  {Object} submission Submission to check data.
      * @param  {Object} plugin     Plugin.
@@ -241,19 +187,11 @@ angular.module('mm.addons.mod_assign')
             // We have the initial text from the rich text editor, compare it with the new text.
             return plugin.rteInitialText != inputData.onlinetext_editor_text;
         } else {
-            // Not using rich text editor or weren't able to get its initial text.
-            // Get it from plugin or offline.
-            return $mmaModAssignOffline.getSubmission(assign.id, submission.userid).catch(function() {
-                // No offline data found.
-            }).then(function(data) {
-                if (data && data.plugindata && data.plugindata.onlinetext_editor) {
-                    return data.plugindata.onlinetext_editor.text;
-                }
-                // No offline data found, get text from plugin.
-                return plugin.editorfields && plugin.editorfields[0] ? plugin.editorfields[0].text : '';
-            }).then(function(initialText) {
-                return initialText != getTextToSubmit(plugin, inputData);
-            });
+            // Not using rich text editor or weren't able to get its initial text. Get it from plugin.
+            var initialText = plugin.editorfields && plugin.editorfields[0] ? plugin.editorfields[0].text : '',
+                newText = getTextToSubmit(plugin, inputData);
+
+            return initialText != newText;
         }
     };
 
@@ -271,34 +209,12 @@ angular.module('mm.addons.mod_assign')
         return $mmText.restorePluginfileUrls(text, files);
     }
 
-    /**
-     * Should prepare and add to pluginData the data to send to server to synchronize an offline submission.
-     *
-     * @module mm.addons.mod_assign
-     * @ngdoc method
-     * @name $mmaModAssignSubmissionOnlinetextHandler#prepareSyncData
-     * @param  {Object} assign      Assignment.
-     * @param  {Object} submission  Submission to check data.
-     * @param  {Object} plugin      Plugin to get the data for.
-     * @param  {Object} offlineData Offline data stored for the submission.
-     * @param  {Object} pluginData  Object where to add the plugin data.
-     * @param  {String} [siteId]    Site ID. If not defined, current site.
-     * @return {Void}
-     */
-    self.prepareSyncData = function(assign, submission, plugin, offlineData, pluginData, siteId) {
-        var textData = offlineData && offlineData.plugindata && offlineData.plugindata.onlinetext_editor;
-        if (textData) {
-            // Has some data to sync.
-            pluginData.onlinetext_editor = textData;
-        }
-    };
-
     return self;
 })
 
 .run(function($mmAddonManager) {
     // Use addon manager to inject $mmaModAssignSubmissionDelegate. This is to provide an example for remote addons,
-    // since they cannot assume that the assign addon will be packaged in custom apps.
+    // since they cannot assume that the quiz addon will be packaged in custom apps.
     var $mmaModAssignSubmissionDelegate = $mmAddonManager.get('$mmaModAssignSubmissionDelegate');
     if ($mmaModAssignSubmissionDelegate) {
         $mmaModAssignSubmissionDelegate.registerHandler('mmaModAssignSubmissionOnlinetext', 'onlinetext',

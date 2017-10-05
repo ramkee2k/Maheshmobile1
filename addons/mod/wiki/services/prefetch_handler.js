@@ -21,28 +21,13 @@ angular.module('mm.addons.mod_wiki')
  * @ngdoc service
  * @name $mmaModWikiPrefetchHandler
  */
-.factory('$mmaModWikiPrefetchHandler', function($mmaModWiki, mmaModWikiComponent, $mmSite, $mmFilepool, $q, $mmGroups, $mmUtil,
-        $mmCourseHelper, $mmCourse, $mmPrefetchFactory, $mmCoursePrefetchDelegate) {
+.factory('$mmaModWikiPrefetchHandler', function($mmaModWiki, mmaModWikiComponent, $mmSite, $mmFilepool, $q, $mmGroups,
+        $mmCourseHelper, $mmCourse, mmCoreDownloading, mmCoreDownloaded) {
 
-    var self = $mmPrefetchFactory.createPrefetchHandler(mmaModWikiComponent);
+    var self = {},
+        downloadPromises = {}; // Store download promises to prevent duplicate requests.
 
-    // RegExp to check if a module has updates based on the result of $mmCoursePrefetchDelegate#getCourseUpdates.
-    self.updatesNames = /^.*files$|^pages$/;
-
-    /**
-     * Download the module.
-     *
-     * @module mm.addons.mod_wiki
-     * @ngdoc method
-     * @name $mmaModWikiPrefetchHandler#download
-     * @param  {Object} module   The module object returned by WS.
-     * @param  {Number} courseId Course ID the module belongs to.
-     * @return {Promise}         Promise resolved when all files have been downloaded. Data returned is not reliable.
-     */
-    self.download = function(module, courseId) {
-        // Wikis cannot be downloaded right away, only prefetched.
-        return self.prefetch(module, courseId);
-    };
+    self.component = mmaModWikiComponent;
 
     /**
      * Get the download size of a module.
@@ -50,17 +35,23 @@ angular.module('mm.addons.mod_wiki')
      * @module mm.addons.mod_wiki
      * @ngdoc method
      * @name $mmaModWikiPrefetchHandler#getDownloadSize
-     * @param  {Object} module    Module to get the size.
-     * @param  {Number} courseId  Course ID the module belongs to.
-     * @param  {String} [siteId]  Site ID. If not defined, current site.
-     * @return {Promise}          With the file size and a boolean to indicate if it is the total size or only partial.
+     * @param {Object} module Module to get the size.
+     * @param {Number} courseId Course ID the module belongs to.
+     * @param  {String} [siteId] Site ID. If not defined, current site.
+     * @return {Promise}       Size.
      */
     self.getDownloadSize = function(module, courseId, siteId) {
         var promises = [];
         siteId = siteId || $mmSite.getId();
 
         promises.push(self.getFiles(module, courseId, siteId).then(function(files) {
-            return $mmUtil.sumFileSizes(files);
+            var size = 0;
+            angular.forEach(files, function(file) {
+                if (file.filesize) {
+                    size = size + file.filesize;
+                }
+            });
+            return size;
         }));
 
         promises.push(getAllPages(module, courseId, siteId).then(function(pages) {
@@ -70,14 +61,12 @@ angular.module('mm.addons.mod_wiki')
                     size = size + page.contentsize;
                 }
             });
-            return {size: size, total: true};
+            return size;
         }));
 
         return $q.all(promises).then(function(sizes) {
             // Sum values in the array.
-            return sizes.reduce(function(a, b) {
-                return {size: a.size + b.size, total: a.total && b.total};
-            }, {size: 0, total: true});
+            return sizes.reduce(function(a, b) { return a + b; }, 0);
         });
     };
 
@@ -96,10 +85,7 @@ angular.module('mm.addons.mod_wiki')
         siteId = siteId || $mmSite.getId();
 
         return $mmaModWiki.getWiki(courseId, module.id, 'coursemodule', siteId).then(function(wiki) {
-            var introFiles = self.getIntroFilesFromInstance(module, wiki);
-            return $mmaModWiki.getWikiFileList(wiki, siteId).then(function(files) {
-                return introFiles.concat(files);
-            });
+            return $mmaModWiki.getWikiFileList(wiki, siteId);
         }).catch(function() {
             // Wiki not found, return empty list.
             return [];
@@ -171,20 +157,6 @@ angular.module('mm.addons.mod_wiki')
     }
 
     /**
-     * Invalidate the prefetched content.
-     *
-     * @module mm.addons.mod_wiki
-     * @ngdoc method
-     * @name $mmaModWikiPrefetchHandler#invalidateContent
-     * @param  {Number} moduleId The module ID.
-     * @param  {Number} courseId Course ID of the module.
-     * @return {Promise}
-     */
-    self.invalidateContent = function(moduleId, courseId) {
-        return $mmaModWiki.invalidateContent(moduleId, courseId);
-    };
-
-    /**
      * Invalidates WS calls needed to determine module status.
      *
      * @module mm.addons.mod_wiki
@@ -195,13 +167,9 @@ angular.module('mm.addons.mod_wiki')
      * @return {Promise}         Promise resolved when done.
      */
     self.invalidateModule = function(module, courseId) {
-        if ($mmCoursePrefetchDelegate.canCheckUpdates()) {
-            // If can check updates only get wiki by course is needed.
-            return $mmaModWiki.invalidateWikiData(courseId);
-        }
-
         return $mmaModWiki.getWiki(courseId, module.id, 'coursemodule').then(function(wiki) {
             var promises = [];
+
             promises.push($mmaModWiki.invalidateWikiData(courseId));
             promises.push($mmaModWiki.invalidateSubwikis(wiki.id));
             promises.push($mmaModWiki.invalidateSubwikiFiles(wiki.id));
@@ -238,29 +206,32 @@ angular.module('mm.addons.mod_wiki')
      * @return {Promise}         Promise resolved when all files have been downloaded. Data returned is not reliable.
      */
     self.prefetch = function(module, courseId, single) {
-        return self.prefetchPackage(module, courseId, single, prefetchWiki);
-    };
-
-    /**
-     * Prefetch a wiki.
-     *
-     * @param  {Object} module   The module object returned by WS.
-     * @param  {Number} courseId Course ID the module belongs to.
-     * @param  {Boolean} single  True if we're downloading a single module, false if we're downloading a whole section.
-     * @param  {String} siteId   Site ID.
-     * @return {Promise}         Promise resolved with an object with 'revision' and 'timemod'.
-     */
-    function prefetchWiki(module, courseId, single, siteId) {
-        var userId = $mmSite.getUserId(),
+        var siteId = $mmSite.getId(),
+            userid = userid || $mmSite.getUserId(),
+            prefetchPromise,
+            deleted = false,
+            component = mmaModWikiComponent,
             revision,
             timemod;
 
-        return $mmFilepool.getPackageTimemodified(siteId, self.component, module.id).then(function(packageModified) {
+        if (downloadPromises[siteId] && downloadPromises[siteId][module.id]) {
+            // There's already a download ongoing for this package, return the promise.
+            return downloadPromises[siteId][module.id];
+        } else if (!downloadPromises[siteId]) {
+            downloadPromises[siteId] = {};
+        }
+
+        // Mark package as downloading.
+        prefetchPromise = $mmFilepool.storePackageStatus(siteId, component, module.id, mmCoreDownloading).then(function() {
+            // Get Package timemodified in order to retrieve only updated pages.
+            return $mmFilepool.getPackageTimemodified(siteId, component, module.id);
+        }).then(function(packageModified) {
             // Get Page list to be retrieved. getWiki and getSubwikis done in getAllPages.
             return getAllPages(module, courseId, siteId).then(function(pages) {
                 var promises = [];
 
                 angular.forEach(pages, function(page) {
+
                     // Check if page has to be fetched, and invalidate it first.
                     if (page.timemodified > packageModified) {
                         promises.push($mmaModWiki.invalidatePage(page.id, siteId).finally(function() {
@@ -273,7 +244,7 @@ angular.module('mm.addons.mod_wiki')
                 promises.push($mmGroups.getActivityGroupMode(module.id, siteId).then(function(groupmode) {
                     if (groupmode === $mmGroups.SEPARATEGROUPS || groupmode === $mmGroups.VISIBLEGROUPS) {
                         // Get the groups available for the user.
-                        return $mmGroups.getActivityAllowedGroups(module.id, userId, siteId);
+                        return $mmGroups.getActivityAllowedGroups(module.id, userid, siteId);
                     }
                     return $q.when();
                 }));
@@ -286,9 +257,16 @@ angular.module('mm.addons.mod_wiki')
 
                 // Get related page files and fetch them.
                 promises.push(self.getFiles(module, courseId, siteId).then(function (files) {
+                    var filePromises = [];
+
                     revision = $mmFilepool.getRevisionFromFileList(files);
 
-                    return $mmFilepool.addFilesToQueueByUrl(siteId, files, self.component, module.id);
+                    angular.forEach(files, function(file) {
+                        var url = file.fileurl;
+                        filePromises.push($mmFilepool.addToQueueByUrl(siteId, url, component, module.id, file.timemodified));
+                    });
+
+                    return $q.all(filePromises);
                 }));
 
                 // Get timemodified.
@@ -299,13 +277,23 @@ angular.module('mm.addons.mod_wiki')
                 return $q.all(promises);
             });
         }).then(function() {
-            // Return revision and timemodified.
-            return {
-                revision: revision,
-                timemod: timemod
-            };
+            // Prefetch finished, mark as downloaded.
+            return $mmFilepool.storePackageStatus(siteId, component, module.id, mmCoreDownloaded, revision, timemod);
+        }).catch(function(error) {
+            // Error prefetching, go back to previous status and reject the promise.
+            return $mmFilepool.setPackagePreviousStatus(siteId, component, module.id).then(function() {
+                return $q.reject(error);
+            });
+        }).finally(function() {
+            deleted = true;
+            delete downloadPromises[siteId][module.id];
         });
-    }
+
+        if (!deleted) {
+            downloadPromises[siteId][module.id] = prefetchPromise;
+        }
+        return prefetchPromise;
+    };
 
     return self;
 });

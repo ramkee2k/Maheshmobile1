@@ -21,23 +21,12 @@ angular.module('mm.addons.mod_assign')
  * @ngdoc controller
  * @name mmaModAssignSubmissionListCtrl
  */
-.controller('mmaModAssignSubmissionListCtrl', function($scope, $stateParams, $mmaModAssign, $mmUtil, $translate, $q, $mmEvents,
-        mmaModAssignComponent, mmaModAssignSubmissionInvalidatedEvent, mmaModAssignSubmissionStatusSubmitted, $mmaModAssignOffline,
-        mmaModAssignNeedGrading, mmaModAssignGradedEvent, $mmSite, $mmaModAssignHelper) {
+.controller('mmaModAssignSubmissionListCtrl', function($scope, $stateParams, $mmaModAssign, $mmUtil, $translate, $q,
+        mmaModAssignComponent, mmaModAssignSubmissionInvalidatedEvent) {
 
-    var courseId = $stateParams.courseid,
-        selectedStatus = $stateParams.status,
-        obsGraded;
+    var courseId = $stateParams.courseid;
 
-    if (selectedStatus) {
-        if (selectedStatus == mmaModAssignNeedGrading) {
-            $scope.title = $translate.instant('mma.mod_assign.numberofsubmissionsneedgrading');
-        } else {
-            $scope.title = $translate.instant('mma.mod_assign.submissionstatus_' + selectedStatus);
-        }
-    } else {
-        $scope.title = $translate.instant('mma.mod_assign.numberofparticipants');
-    }
+    $scope.title = $stateParams.modulename;
     $scope.assignComponent = mmaModAssignComponent;
     $scope.courseId = courseId;
     $scope.moduleId = $stateParams.moduleid;
@@ -60,80 +49,34 @@ angular.module('mm.addons.mod_assign')
                 }
 
                 // We want to show the user data on each submission.
-                return $mmaModAssignHelper.getParticipants(assign).then(function(p) {
-                    $scope.haveAllParticipants = true;
+                return $mmaModAssign.listParticipants(assign.id).then(function(p) {
                     participants = p;
+                    $scope.haveAllParticipants = true;
                 }).catch(function() {
                     $scope.haveAllParticipants = false;
                     return $q.when();
                 }).finally(function() {
                     return $mmaModAssign.getSubmissionsUserData(data.submissions, courseId, assign.id, blindMarking, participants)
                             .then(function(submissions) {
+                        angular.forEach(submissions, function(submission, index) {
+                            submission.statusTranslated = $translate.instant('mma.mod_assign.submissionstatus_' +
+                                submission.status);
+                            submission.statusClass = $mmaModAssign.getSubmissionStatusClass(submission.status);
 
-                        var searchStatus = mmaModAssignNeedGrading == selectedStatus ?
-                                mmaModAssignSubmissionStatusSubmitted : selectedStatus,
-                            promises = [];
-
-                        $scope.submissions = [];
-                        angular.forEach(submissions, function(submission) {
-                            if (!searchStatus || searchStatus == submission.status) {
-                                promises.push($mmaModAssignOffline.getSubmissionGrade(assign.id, submission.userid)
-                                        .catch(function() {
-                                    // Ignore failures.
-                                }).then(function(data) {
-                                    var promise,
-                                        notSynced = false;
-
-                                    // Load offline grades.
-                                    if (data && submission.timemodified < data.timemodified) {
-                                        notSynced = true;
-                                    }
-
-                                    if (mmaModAssignNeedGrading == selectedStatus) {
-                                        promise = $mmaModAssign.needsSubmissionToBeGraded(submission, assign.id);
-                                    } else {
-                                        promise = $q.when(true);
-                                    }
-
-                                    return promise.then(function(add) {
-                                        if (!add) {
-                                            return;
-                                        }
-                                        submission.statusClass = $mmaModAssign.getSubmissionStatusClass(submission.status);
-                                        submission.gradingClass =
-                                            $mmaModAssign.getSubmissionGradingStatusClass(submission.gradingstatus);
-
-                                        // Show submission status if not submitted for grading.
-                                        if (submission.statusClass != 'badge-balanced' || !submission.gradingstatus) {
-                                            submission.statusTranslated = $translate.instant('mma.mod_assign.submissionstatus_' +
-                                                submission.status);
-                                        } else {
-                                            submission.statusTranslated = false;
-                                        }
-
-                                        if (notSynced) {
-                                            submission.gradingStatusTranslationId = 'mma.mod_assign.gradenotsynced';
-                                            submission.gradingClass = "";
-                                        } else if (submission.statusClass != 'badge-assertive' ||
-                                                submission.gradingClass != 'badge-assertive') {
-                                            // Show grading status if one of the statuses is not done.
-                                            submission.gradingStatusTranslationId =
-                                                $mmaModAssign.getSubmissionGradingStatusTranslationId(submission.gradingstatus);
-                                        } else {
-                                            submission.gradingStatusTranslationId = false;
-                                        }
-
-                                        $scope.submissions.push(submission);
-                                    });
-                                }));
+                            if ($stateParams.sid == submission.submitid) {
+                                $scope.submissionToLoad = index + 1;
                             }
                         });
-                        return $q.all(promises);
+                        $scope.submissions = submissions;
                     });
                 });
             });
         }).catch(function(message) {
-            $mmUtil.showErrorModalDefault(message, 'Error getting assigment data.');
+            if (message) {
+                $mmUtil.showErrorModal(message);
+            } else {
+                $mmUtil.showErrorModal('Error getting assigment data.');
+            }
             return $q.reject();
         });
     }
@@ -157,21 +100,10 @@ angular.module('mm.addons.mod_assign')
         $scope.assignmentLoaded = true;
     });
 
-    obsGraded = $mmEvents.on(mmaModAssignGradedEvent, function(data) {
-        if ($scope.assign && data.assignmentId == $scope.assign.id && data.siteId == $mmSite.getId() &&
-                data.userId == $mmSite.getUserId()) {
-            refreshAllData();
-        }
-    });
-
     // Pull to refresh.
     $scope.refreshSubmissionList = function() {
         refreshAllData().finally(function() {
             $scope.$broadcast('scroll.refreshComplete');
         });
     };
-
-    $scope.$on('$destroy', function() {
-        obsGraded && obsGraded.off && obsGraded.off();
-    });
 });

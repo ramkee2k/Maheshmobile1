@@ -8,6 +8,5 @@
     "personalnotes": "Ohar pertsonalak",
     "publishstate": "Testuingurua",
     "sitenotes": "Guneko oharrak",
-    "userwithid": "{{id}} IDa duen erabiltzailea",
-    "warningnotenotsent": "Ezin izan da {{course}} ikastaroan oharrak gehitu. {{error}}"
+    "userwithid": "{{id}} IDa duen erabiltzailea"
 }

@@ -1,7 +1,6 @@
 {
     "emptyfilelist": "表示するファイルはありません。",
-    "files": "ファイル",
-    "privatefiles": "プライベートファイル",
+    "myfiles": "マイファイル",
     "sitefiles": "サイトファイル",
-    "uploadfiles": "フィードバックファイルを送信する"
+    "uploadfiles": "ファイルをアップロードできる"
 }

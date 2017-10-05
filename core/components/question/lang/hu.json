@@ -1,16 +1,10 @@
 {
     "answer": "Válasz",
-    "answersaved": "A válasz elmentve",
     "complete": "Teljes",
     "correct": "Helyes",
     "feedback": "Visszajelzés",
     "incorrect": "Hibás",
-    "information": "Információ",
-    "invalidanswer": "Hiányos válasz",
     "notanswered": "Még nincs válasz",
     "notyetanswered": "Megválaszolatlan",
-    "partiallycorrect": "Részben helyes",
-    "questionno": "{{$a}}. kérdés",
-    "requiresgrading": "Pontozandó",
-    "unknown": "ismeretlen"
+    "partiallycorrect": "Részben helyes"
 }

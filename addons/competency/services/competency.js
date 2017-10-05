@@ -130,8 +130,13 @@ angular.module('mm.addons.competency')
             return $q.when(false);
         }
 
-        return self.getCourseCompetencies(courseId, siteId).catch(function() {
-            return false;
+        return self.getCourseCompetencies(courseId, siteId).then(function(competencies) {
+            if (competencies.competencies.length <= 0) {
+                return false;
+            }
+            return competencies;
+        }).catch(function() {
+            return $q.when(false);
         });
     };
 
@@ -474,17 +479,14 @@ angular.module('mm.addons.competency')
                 userId = userId || site.getUserId();
 
                 var params = {
-                        planid: planId,
-                        competencyid: competencyId,
-                        userid: userId
-                    },
-                    preSets = {
-                      typeExpected: 'boolean'
-                    };
+                    planid: planId,
+                    competencyid: competencyId,
+                    userid: userId
+                };
                 if (planStatus == mmaCompetencyStatusComplete) {
-                    return site.write('core_competency_user_competency_plan_viewed', params, preSets);
+                    return site.write('core_competency_user_competency_plan_viewed', params);
                 } else {
-                    return site.write('core_competency_user_competency_viewed_in_plan', params, preSets);
+                    return site.write('core_competency_user_competency_viewed_in_plan', params);
                 }
             });
         }

@@ -14,26 +14,17 @@
 
 angular.module('mm.addons.files')
 
-.controller('mmaFilesIndexController', function($scope, $mmaFiles, $mmSite, $mmUtil, $mmApp, $mmaFilesHelper, $mmEvents,
-            mmCoreEventSiteUpdated) {
+.controller('mmaFilesIndexController', function($scope, $mmaFiles, $mmSite, $mmUtil, $mmApp, $mmaFilesHelper) {
 
-    var updateSiteObserver;
-
-    // Set scope data.
-    function setData() {
-        var canAccessFiles = $mmaFiles.canAccessFiles(),
-            canAccessMyFiles = $mmSite.canAccessMyFiles(),
-            canViewMyFiles = canAccessFiles && !$mmaFiles.isPrivateFilesDisabledInSite();
-
-        $scope.showPrivateFiles = canViewMyFiles && canAccessMyFiles;
-        $scope.showSiteFiles = !$mmaFiles.isSiteFilesDisabledInSite();
-        $scope.canDownload = $mmSite.canDownloadFiles();
-
+    $scope.canAccessFiles = $mmaFiles.canAccessFiles;
+    $scope.showPrivateFiles = function() {
+        return $mmaFiles.canAccessFiles() && $mmSite.canAccessMyFiles();
+    };
+    $scope.showUpload = function() {
         // Show upload in this page if user can upload but he can't see the My Files option.
-        $scope.showUpload = !canViewMyFiles && canAccessMyFiles && $mmSite.canUploadFiles() && !$mmaFiles.isUploadDisabledInSite();
-    }
-
-    setData();
+        return !$mmaFiles.canAccessFiles() && $mmSite.canAccessMyFiles() && $mmSite.canUploadFiles();
+    };
+    $scope.canDownload = $mmSite.canDownloadFiles;
 
     $scope.add = function() {
         $mmaFiles.versionCanUploadFiles().then(function(canUpload) {
@@ -47,14 +38,4 @@ angular.module('mm.addons.files')
         });
     };
 
-    // Update scope data if current site info is updated.
-    updateSiteObserver = $mmEvents.on(mmCoreEventSiteUpdated, function(siteId) {
-        if ($mmSite.getId() === siteId) {
-            setData();
-        }
-    });
-
-    $scope.$on('$destroy', function() {
-        updateSiteObserver && updateSiteObserver.off && updateSiteObserver.off();
-    });
 });

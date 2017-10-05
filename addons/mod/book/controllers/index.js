@@ -21,15 +21,14 @@ angular.module('mm.addons.mod_book')
  * @ngdoc controller
  * @name mmaModBookIndexCtrl
  */
-.controller('mmaModBookIndexCtrl', function($scope, $stateParams, $mmUtil, $mmCourseHelper, $mmaModBook, $log, mmaModBookComponent,
-            $mmText, $ionicPopover, $mmApp, $q, $mmCourse, $ionicScrollDelegate, $translate, $mmaModBookPrefetchHandler) {
+.controller('mmaModBookIndexCtrl', function($scope, $stateParams, $mmUtil, $mmaModBook, $log, mmaModBookComponent, $mmText,
+            $ionicPopover, $mmApp, $q, $mmCourse, $ionicScrollDelegate, $translate, $timeout) {
     $log = $log.getInstance('mmaModBookIndexCtrl');
 
     var module = $stateParams.module || {},
-        courseId = $stateParams.courseid,
-        chapters,
+        courseid = $stateParams.courseid,
         currentChapter,
-        contentsMap;
+        contentsMap = $mmaModBook.getContentsMap(module.contents);
 
     $scope.title = module.name;
     $scope.description = module.description;
@@ -39,11 +38,13 @@ angular.module('mm.addons.mod_book')
     $scope.loaded = false;
     $scope.refreshIcon = 'spinner';
 
+    var chapters = $mmaModBook.getTocList(module.contents);
+    currentChapter = $mmaModBook.getFirstChapter(chapters);
+
     // Convenience function to load a book chapter.
     function loadChapter(chapterId) {
         currentChapter = chapterId;
         $ionicScrollDelegate.scrollTop();
-
         return $mmaModBook.getChapterContent(contentsMap, chapterId, module.id).then(function(content) {
             $scope.content = content;
             $scope.previousChapter = $mmaModBook.getPreviousChapter(chapters, chapterId);
@@ -53,7 +54,7 @@ angular.module('mm.addons.mod_book')
             $mmaModBook.logView(module.instance, chapterId).then(function() {
                 // Module is completed when last chapter is viewed, so we only check completion if the last is reached.
                 if (!$scope.nextChapter) {
-                    $mmCourse.checkModuleCompletion(courseId, module.completionstatus);
+                    $mmCourse.checkModuleCompletion(courseid, module.completionstatus);
                 }
             });
         }).catch(function() {
@@ -67,53 +68,18 @@ angular.module('mm.addons.mod_book')
     }
 
     // Convenience function to download book contents and load the current chapter.
-    function fetchContent(chapterId, refresh) {
-        var downloadFailed = false,
-            promises = [];
-
-        // Try to get the book data.
-        promises.push($mmaModBook.getBook(courseId, module.id).then(function(book) {
-            $scope.title = book.name || $scope.title;
-            $scope.description = book.intro || $scope.description;
-        }).catch(function() {
-            // Ignore errors since this WS isn't available in some Moodle versions.
-        }));
-
-        // Download content. This function also loads module contents if needed.
-        promises.push($mmaModBookPrefetchHandler.download(module, courseId).catch(function() {
+    function fetchContent(chapterId) {
+        var downloadFailed = false;
+        return $mmaModBook.downloadAllContent(module).catch(function() {
             // Mark download as failed but go on since the main files could have been downloaded.
             downloadFailed = true;
-
-            if (!module.contents.length) {
-                // Try to load module contents for offline usage.
-                return $mmCourse.loadModuleContents(module, courseId).catch(function(error) {
-                    // Error getting module contents, fail.
-                    $scope.loaded = true;
-                    $scope.refreshIcon = 'ion-refresh';
-                    $mmUtil.showErrorModalDefault(error, 'mm.course.errorgetmodule', true);
-                    return $q.reject();
-                });
-            }
-        }));
-
-        return $q.all(promises).then(function() {
-            contentsMap = $mmaModBook.getContentsMap(module.contents);
-            chapters = $mmaModBook.getTocList(module.contents);
-            $scope.toc = chapters;
-
-            if (typeof currentChapter == 'undefined') {
-                currentChapter = $mmaModBook.getFirstChapter(chapters);
-            }
-
+        }).finally(function() {
             // Show chapter.
-            return loadChapter(chapterId || currentChapter).then(function() {
+            return loadChapter(chapterId).then(function() {
                 if (downloadFailed && $mmApp.isOnline()) {
                     // We could load the main file but the download failed. Show error message.
                     $mmUtil.showErrorModal('mm.core.errordownloadingsomefiles', true);
                 }
-
-                // All data obtained, now fill the context menu.
-                $mmCourseHelper.fillContextMenu($scope, module, courseId, refresh, mmaModBookComponent);
             });
         });
     }
@@ -121,9 +87,8 @@ angular.module('mm.addons.mod_book')
     $scope.doRefresh = function() {
         if ($scope.loaded) {
             $scope.refreshIcon = 'spinner';
-
-            return $mmaModBook.invalidateContent(module.id, courseId).finally(function() {
-                return fetchContent(currentChapter, true);
+            $mmaModBook.invalidateContent(module.id).then(function() {
+                return fetchContent(currentChapter);
             }).finally(function() {
                 $scope.refreshIcon = 'ion-refresh';
                 $scope.$broadcast('scroll.refreshComplete');
@@ -140,30 +105,24 @@ angular.module('mm.addons.mod_book')
     };
 
     // Menu popover.
-    $ionicPopover.fromTemplateUrl('addons/mod/book/templates/toc.html', {
-        scope: $scope
-    }).then(function(popover) {
-        $scope.popover = popover;
+    $scope.toc = chapters;
+    $timeout(function() {
+        $ionicPopover.fromTemplateUrl('addons/mod/book/templates/toc.html', {
+            scope: $scope
+        }).then(function(popover) {
+            $scope.popover = popover;
 
-        $scope.openToc = function($event) {
-            popover.show($event);
-        };
+            $scope.openToc = function($event) {
+                popover.show($event);
+            };
+        });
     });
 
-    // Confirm and Remove action.
-    $scope.removeFiles = function() {
-        $mmCourseHelper.confirmAndRemove(module, courseId);
-    };
-
-    // Context Menu Prefetch action.
-    $scope.prefetch = function() {
-        $mmCourseHelper.contextMenuPrefetch($scope, module, courseId);
-    };
     // Context Menu Description action.
     $scope.expandDescription = function() {
-        $mmText.expandText($translate.instant('mm.core.description'), $scope.description, false, mmaModBookComponent, module.id);
+        $mmText.expandText($translate.instant('mm.core.description'), $scope.description);
     };
 
 
-    fetchContent();
+    fetchContent(currentChapter);
 });

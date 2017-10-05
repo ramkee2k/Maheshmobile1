@@ -1,7 +1,17 @@
 <ion-content class="has-tabs" mm-state-class>
     <ion-refresher pulling-text="{{ 'mm.core.pulltorefresh' | translate }}" ng-if="loaded" on-refresh="refresh()"></ion-refresher>
 
-    <mm-searchbox ng-if="canSearch" submit-action="search" placeholder="{{ 'mma.messages.contactname' | translate }}" initial-value="{{formData.searchString}}" autocorrect="off" spellcheck="false" length-check="2"></mm-searchbox>
+    <form ng-if="canSearch()" ng-submit="search(formData.searchString);">
+        <div class="list">
+            <div class="item item-input-inset">
+                <label class="item-input-wrapper">
+                    <i class="icon ion-search placeholder-icon"></i>
+                    <input type="text" placeholder="{{ 'mma.messages.contactname' | translate }}" ng-model="formData.searchString" autocorrect="off" spellcheck="false">
+                </label>
+                <button type="submit" class="button button-clear" ng-disabled="!formData.searchString || formData.searchString.length < 3">{{ 'mm.core.search' | translate}}</button>
+            </div>
+        </div>
+    </form>
 
     <mm-loading hide-until="loaded" dyn-message="loadingMessage">
         <ul class="list">
@@ -22,7 +32,10 @@
             </li>
         </ul>
 
-        <mm-empty-box ng-if="!hasContacts && !contacts[searchType]" icon="ion-person-stalker" message="{{ 'mma.messages.contactlistempty' | translate}}"></mm-empty-box>
-        <mm-empty-box ng-if="!hasContacts && contacts[searchType]" icon="ion-person-stalker" message="{{ 'mma.messages.nousersfound' | translate}}"></mm-empty-box>
+        <div ng-if="!hasContacts" class="padding">
+            <p ng-if="!contacts[searchType]">{{ 'mma.messages.contactlistempty' | translate}}</p>
+            <p ng-if="contacts[searchType]">{{ 'mma.messages.nousersfound' | translate}}</p>
+        </div>
+
     </mm-loading>
 </ion-content>

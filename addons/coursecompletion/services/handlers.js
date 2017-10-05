@@ -23,7 +23,7 @@ angular.module('mm.addons.coursecompletion')
  * @ngdoc service
  * @name $mmaCourseCompletionHandlers
  */
-.factory('$mmaCourseCompletionHandlers', function($mmaCourseCompletion, $state, mmCoursesAccessMethods, mmUserProfileHandlersTypeNewPage) {
+.factory('$mmaCourseCompletionHandlers', function($mmaCourseCompletion, $state, mmCoursesAccessMethods) {
 
     // We use "caches" to decrease network usage.
     var self = {},
@@ -79,9 +79,7 @@ angular.module('mm.addons.coursecompletion')
      */
     self.viewCompletion = function() {
 
-        var self = {
-            type: mmUserProfileHandlersTypeNewPage
-        };
+        var self = {};
 
         /**
          * Check if handler is enabled.
@@ -97,17 +95,11 @@ angular.module('mm.addons.coursecompletion')
          *
          * @param {Object} user     User to check.
          * @param {Number} courseId Course ID.
-         * @param  {Object} [navOptions] Course navigation options for current user. See $mmCourses#getUserNavigationOptions.
-         * @param  {Object} [admOptions] Course admin options for current user. See $mmCourses#getUserAdministrationOptions.
          * @return {Boolean}        True if handler is enabled, false otherwise.
          */
-        self.isEnabledForUser = function(user, courseId, navOptions, admOptions) {
-            return $mmaCourseCompletion.isPluginViewEnabledForCourse(courseId).then(function(courseEnabled) {
+        self.isEnabledForUser = function(user, courseId) {
+            return $mmaCourseCompletion.isPluginViewEnabledForCourse(courseId).then(function() {
                 var cacheKey = getCacheKey(courseId, user.id);
-                // If is not enabled in the course, is not enabled for the user.
-                if (!courseEnabled) {
-                    viewCompletionEnabledCache[cacheKey] = false;
-                }
                 if (typeof viewCompletionEnabledCache[cacheKey] != 'undefined') {
                     return viewCompletionEnabledCache[cacheKey];
                 }
@@ -137,9 +129,8 @@ angular.module('mm.addons.coursecompletion')
             return function($scope) {
 
                 // Button title.
-                $scope.title = 'mma.coursecompletion.coursecompletion';
+                $scope.title = 'mma.coursecompletion.viewcoursereport';
                 $scope.class = 'mma-coursecompletion-user-handler';
-                $scope.icon = 'ion-android-checkbox-outline';
 
                 $scope.action = function($event) {
                     $event.preventDefault();
@@ -180,22 +171,15 @@ angular.module('mm.addons.coursecompletion')
         /**
          * Check if handler is enabled for this course.
          *
-         * @param  {Number} courseId     Course ID.
-         * @param  {Object} accessData   Type of access to the course: default, guest, ...
-         * @param  {Object} [navOptions] Course navigation options for current user. See $mmCourses#getUserNavigationOptions.
-         * @param  {Object} [admOptions] Course admin options for current user. See $mmCourses#getUserAdministrationOptions.
-         * @return {Boolean}             True if handler is enabled, false otherwise.
+         * @param {Number} courseId   Course ID.
+         * @param {Object} accessData Type of access to the course: default, guest, ...
+         * @return {Boolean}          True if handler is enabled, false otherwise.
          */
-        self.isEnabledForCourse = function(courseId, accessData, navOptions, admOptions) {
+        self.isEnabledForCourse = function(courseId, accessData) {
             if (accessData && accessData.type == mmCoursesAccessMethods.guest) {
                 return false; // Not enabled for guests.
             }
-
-            return $mmaCourseCompletion.isPluginViewEnabledForCourse(courseId, false).then(function(courseEnabled) {
-                // If is not enabled in the course, is not enabled for the user.
-                if (!courseEnabled) {
-                    coursesNavEnabledCache[courseId] = false;
-                }
+            return $mmaCourseCompletion.isPluginViewEnabledForCourse(courseId).then(function() {
                 // Check if the user can see his own report, teachers can't.
                 if (typeof coursesNavEnabledCache[courseId] != 'undefined') {
                     return coursesNavEnabledCache[courseId];

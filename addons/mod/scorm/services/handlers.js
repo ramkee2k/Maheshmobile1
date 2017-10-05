@@ -23,7 +23,7 @@ angular.module('mm.addons.mod_scorm')
  */
 .factory('$mmaModScormHandlers', function($mmCourse, $mmaModScorm, $mmEvents, $state, $mmSite, $mmaModScormHelper,
         $mmCoursePrefetchDelegate, mmCoreDownloading, mmCoreNotDownloaded, mmCoreOutdated, mmCoreEventPackageStatusChanged,
-        mmaModScormComponent, $q, $mmContentLinksHelper, $mmUtil, $mmaModScormSync, $mmaModScormPrefetchHandler) {
+        mmaModScormComponent, $q, $mmContentLinksHelper, $mmUtil) {
     var self = {};
 
     /**
@@ -90,12 +90,12 @@ angular.module('mm.addons.mod_scorm')
                     var revision = scorm.sha1hash,
                         timemodified = 0;
 
-                    function download(isOutdated) {
+                    function download() {
                         // We need to call getScorm again, the package might have been updated.
                         $scope.spinner = true; // Show spinner since this operation might take a while.
                         $mmaModScorm.getScorm(courseid, module.id, module.url).then(function(scorm) {
-                            $mmaModScormHelper.confirmDownload(scorm, isOutdated).then(function() {
-                                $mmaModScormPrefetchHandler.prefetch(module, courseid).catch(function() {
+                            $mmaModScormHelper.confirmDownload(scorm).then(function() {
+                                $mmaModScorm.prefetch(scorm).catch(function() {
                                     if (!$scope.$$destroyed) {
                                         $mmaModScormHelper.showDownloadError(scorm);
                                     }
@@ -128,8 +128,8 @@ angular.module('mm.addons.mod_scorm')
                             e.preventDefault();
                             e.stopPropagation();
                         }
-                        $mmaModScorm.invalidateAllScormData(scorm.id).finally(function() {
-                            download(true);
+                        $mmaModScorm.invalidateContent(scorm.coursemodule).finally(function() {
+                            download();
                         });
                     };
 
@@ -164,71 +164,69 @@ angular.module('mm.addons.mod_scorm')
     };
 
     /**
-     * Content links handler for module index page.
+     * Content links handler.
      *
      * @module mm.addons.mod_scorm
      * @ngdoc method
-     * @name $mmaModScormHandlers#indexLinksHandler
+     * @name $mmaModScormHandlers#linksHandler
      */
-    self.indexLinksHandler = $mmContentLinksHelper.createModuleIndexLinkHandler('mmaModScorm', 'scorm', $mmaModScorm);
+    self.linksHandler = function() {
 
-    /**
-     * Content links handler for quiz grade page.
-     * @todo Go to user attempts list if it isn't current user.
-     *
-     * @module mm.addons.mod_scorm
-     * @ngdoc method
-     * @name $mmaModScormHandlers#gradeLinksHandler
-     */
-    self.gradeLinksHandler = $mmContentLinksHelper.createModuleGradeLinkHandler('mmaModScorm', 'scorm', $mmaModScorm);
-
-    /**
-     * Synchronization handler.
-     *
-     * @module mm.addons.mod_scorm
-     * @ngdoc method
-     * @name $mmaModScormHandlers#syncHandler
-     */
-    self.syncHandler = function() {
-
-        var self = {};
+        var self = {},
+            patterns = ['/mod/scorm/view.php', '/mod/scorm/grade.php'];
 
         /**
-         * Execute the process.
-         * Receives the ID of the site affected, undefined for all sites.
+         * Whether or not the handler is enabled for a certain site.
          *
-         * @param  {String} [siteId] ID of the site affected, undefined for all sites.
-         * @return {Promise}         Promise resolved when done, rejected if failure.
+         * @param  {String} siteId     Site ID.
+         * @param  {Number} [courseId] Course ID related to the URL.
+         * @return {Promise}           Promise resolved with true if enabled.
          */
-        self.execute = function(siteId) {
-            return $mmaModScormSync.syncAllScorms(siteId);
+        function isEnabled(siteId, courseId) {
+            return $mmaModScorm.isPluginEnabled(siteId).then(function(enabled) {
+                if (!enabled) {
+                    return false;
+                }
+                return courseId || $mmCourse.canGetModuleWithoutCourseId(siteId);
+            });
+        }
+
+        /**
+         * Get actions to perform with the link.
+         *
+         * @param {String[]} siteIds  Site IDs the URL belongs to.
+         * @param {String} url        URL to treat.
+         * @param {Number} [courseId] Course ID related to the URL.
+         * @return {Promise}          Promise resolved with the list of actions.
+         *                            See {@link $mmContentLinksDelegate#registerLinkHandler}.
+         */
+        self.getActions = function(siteIds, url, courseId) {
+            // Check it's a SCORM URL.
+            if (url.indexOf(patterns[0]) > -1) {
+                // SCORM index.
+                return $mmContentLinksHelper.treatModuleIndexUrl(siteIds, url, isEnabled, courseId);
+            } else if (url.indexOf(patterns[1]) > -1) {
+                // SCORM grade.
+                // @todo Go to user attempts list if it isn't current user.
+                return $mmContentLinksHelper.treatModuleGradeUrl(siteIds, url, isEnabled, courseId);
+            }
+
+            return $q.when([]);
         };
 
         /**
-         * Get the time between consecutive executions.
+         * Check if the URL is handled by this handler. If so, returns the URL of the site.
          *
-         * @return {Number} Time between consecutive executions (in ms).
+         * @param  {String} url URL to check.
+         * @return {String}     Site URL. Undefined if the URL doesn't belong to this handler.
          */
-        self.getInterval = function() {
-            return 600000; // 10 minutes.
-        };
-
-        /**
-         * Whether it's a synchronization process or not.
-         *
-         * @return {Boolean} True if is a sync process, false otherwise.
-         */
-        self.isSync = function() {
-            return true;
-        };
-
-        /**
-         * Whether the process uses network or not.
-         *
-         * @return {Boolean} True if uses network, false otherwise.
-         */
-        self.usesNetwork = function() {
-            return true;
+        self.handles = function(url) {
+            for (var i = 0; i < patterns.length; i++) {
+                var position = url.indexOf(patterns[i]);
+                if (position > -1) {
+                    return url.substr(0, position);
+                }
+            }
         };
 
         return self;

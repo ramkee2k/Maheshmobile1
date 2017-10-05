@@ -211,7 +211,7 @@ angular.module('mm.addons.qtype_ddwtos')
                     }
                 }
             }
-            console.warn('Qtype ddwtos: Prefix "' + prefix + '" not found in class names.');
+            throw 'Prefix "' + prefix + '" not found in class names.';
         };
 
         this.get_choice = function(node) {

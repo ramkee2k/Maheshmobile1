@@ -1,9 +1,7 @@
 {
-    "addfiletext": "Datei hinzufügen",
-    "audio": "Audio",
+    "audio": "Audioaufnahme",
     "camera": "Kamera",
     "confirmuploadfile": "Möchten Sie wirklich {{size}} hochladen?",
-    "confirmuploadunknownsize": "Die Datenmenge kann nicht berechnet werden. Möchten Sie wirklich hochladen?",
     "errorcapturingaudio": "Fehler bei der Audioaufnahme",
     "errorcapturingimage": "Fehler bei der Fotoaufnahme",
     "errorcapturingvideo": "Fehler bei der Videoaufnahme",
@@ -17,9 +15,8 @@
     "maxbytesfile": "Die Datei {{$a.file}} ist zu groß. Die maximale Größe zum Hochladen ist {{$a.size}}.",
     "photoalbums": "Fotoalbum",
     "readingfile": "Datei lesen",
-    "selectafile": "Wählen Sie eine Datei.",
+    "success": "Fertig!",
     "uploadafile": "Datei hochladen",
     "uploading": "Hochladen",
-    "uploadingperc": "Hochladen: {{$a}}%",
-    "video": "Video"
+    "video": "Videoaufnahme"
 }

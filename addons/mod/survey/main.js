@@ -14,10 +14,6 @@
 
 angular.module('mm.addons.mod_survey', [])
 
-.constant('mmaModSurveyComponent', 'mmaModSurvey')
-.constant('mmaModSurveyAutomSyncedEvent', 'mma_mod_survey_autom_synced')
-.constant('mmaModSurveySyncTime', 300000) // In milliseconds.
-
 .config(function($stateProvider) {
 
     $stateProvider
@@ -38,12 +34,7 @@ angular.module('mm.addons.mod_survey', [])
 
 })
 
-.config(function($mmCourseDelegateProvider, $mmContentLinksDelegateProvider, $mmCoursePrefetchDelegateProvider) {
+.config(function($mmCourseDelegateProvider, $mmContentLinksDelegateProvider) {
     $mmCourseDelegateProvider.registerContentHandler('mmaModSurvey', 'survey', '$mmaModSurveyHandlers.courseContent');
     $mmContentLinksDelegateProvider.registerLinkHandler('mmaModSurvey', '$mmaModSurveyHandlers.linksHandler');
-    $mmCoursePrefetchDelegateProvider.registerPrefetchHandler('mmaModSurvey', 'survey', '$mmaModSurveyPrefetchHandler');
-})
-
-.run(function($mmCronDelegate) {
-    $mmCronDelegate.register('mmaModSurvey', '$mmaModSurveyHandlers.syncHandler');
 });

@@ -50,7 +50,7 @@ angular.module('mm.core')
                 timeInterval;
 
             // Add mm-timer class.
-            element.addClass('mm-timer item item-icon-left');
+            element.addClass('mm-timer');
             scope.text = attrs.timerText || '';
 
             // Check time left every 200ms.

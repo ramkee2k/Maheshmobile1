@@ -18,8 +18,6 @@ angular.module('mm.addons.calendar', [])
 .constant('mmaCalendarDefaultNotifTime', 60)
 .constant('mmaCalendarComponent', 'mmaCalendarEvents')
 .constant('mmaCalendarPriority', 400)
-.constant('mmaCalendarDefaultNotifTimeSetting', 'mmaCalendarDefaultNotifTime')
-.constant('mmaCalendarDefaultNotifTimeChangedEvent', 'mma_calendar_default_notif_time_changed')
 
 .config(function($stateProvider, $mmSideMenuDelegateProvider, mmaCalendarPriority) {
 
@@ -46,16 +44,6 @@ angular.module('mm.addons.calendar', [])
                     templateUrl: 'addons/calendar/templates/event.html'
                 }
             }
-        })
-
-        .state('site.calendar-settings', {
-            url: '/calendar-settings',
-            views: {
-                'site': {
-                    controller: 'mmaCalendarSettingsCtrl',
-                    templateUrl: 'addons/calendar/templates/settings.html'
-                }
-            }
         });
 
     // Register side menu addon.
@@ -63,25 +51,18 @@ angular.module('mm.addons.calendar', [])
 
 })
 
-.run(function($mmaCalendar, $mmLocalNotifications, $state, $mmApp, mmaCalendarComponent) {
+.run(function($mmaCalendar, $mmLocalNotifications, $state, $ionicPlatform, $mmApp, mmaCalendarComponent) {
 
     // Listen for notification clicks.
     $mmLocalNotifications.registerClick(mmaCalendarComponent, function(data) {
         if (data.eventid) {
             $mmApp.ready().then(function() {
-                $mmaCalendar.isDisabled(data.siteid).then(function(disabled) {
-                    if (disabled) {
-                        // The calendar is disabled in the site, don't open it.
-                        return;
-                    }
-
-                    $state.go('redirect', {siteid: data.siteid, state: 'site.calendar', params: {eventid: data.eventid}});
-                });
+                $state.go('redirect', {siteid: data.siteid, state: 'site.calendar', params: {eventid: data.eventid}});
             });
         }
     });
 
-    $mmApp.ready().then(function() {
+    $ionicPlatform.ready(function() {
         $mmaCalendar.scheduleAllSitesEventsNotifications();
     });
 });

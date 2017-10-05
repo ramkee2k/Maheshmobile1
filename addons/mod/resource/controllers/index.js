@@ -22,11 +22,11 @@ angular.module('mm.addons.mod_resource')
  * @name mmaModResourceIndexCtrl
  */
 .controller('mmaModResourceIndexCtrl', function($scope, $stateParams, $mmUtil, $mmaModResource, $log, $mmApp, $mmCourse, $timeout,
-        $mmText, $translate, mmaModResourceComponent, $mmaModResourcePrefetchHandler, $mmCourseHelper, $mmaModResourceHelper, $q) {
+        $mmText, $translate) {
     $log = $log.getInstance('mmaModResourceIndexCtrl');
 
     var module = $stateParams.module || {},
-        courseId = $stateParams.courseid;
+        courseid = $stateParams.courseid;
 
     $scope.title = module.name;
     $scope.description = module.description;
@@ -34,40 +34,17 @@ angular.module('mm.addons.mod_resource')
     $scope.mode = false;
     $scope.loaded = false;
     $scope.refreshIcon = 'spinner';
-    $scope.component = mmaModResourceComponent;
-    $scope.componentId = module.id;
-    $scope.canGetResource = $mmaModResource.isGetResourceWSAvailable();
 
-    function fetchContent(refresh) {
-        // Load module contents if needed. Passing refresh is needed to force reloading contents.
-        return $mmCourse.loadModuleContents(module, courseId, null, false, refresh).then(function() {
-            if (!module.contents || !module.contents.length) {
-                return $q.reject();
-            }
-
-            // Get the resource instance to get the latest name/description and to know if it's embedded.
-            if ($scope.canGetResource) {
-                return $mmaModResource.getResourceData(courseId, module.id).catch(function() {
-                    // Ignore errors.
-                });
-            } else {
-                return $mmCourse.getModule(module.id, courseId).catch(function() {
-                    // Ignore errors.
-                });
-            }
-        }).then(function(mod) {
-            $scope.title = mod.name;
-            $scope.description = mod.intro || mod.description;
-
+    function fetchContent() {
+        if (module.contents && module.contents.length) {
             if ($mmaModResource.isDisplayedInIframe(module)) {
                 $scope.mode = 'iframe';
-
                 var downloadFailed = false;
-                return $mmaModResourcePrefetchHandler.download(module).catch(function() {
+                return $mmaModResource.downloadAllContent(module).catch(function(err) {
                     // Mark download as failed but go on since the main files could have been downloaded.
                     downloadFailed = true;
-                }).then(function() {
-                    return $mmaModResource.getIframeSrc(module).then(function(src) {
+                }).finally(function() {
+                    $mmaModResource.getIframeSrc(module).then(function(src) {
                         if ($scope.src && src.toString() == $scope.src.toString()) {
                             // Re-loading same page. Set it to empty and then re-set the src
                             // in the next digest so it detects it has changed.
@@ -78,68 +55,63 @@ angular.module('mm.addons.mod_resource')
                         } else {
                             $scope.src = src;
                         }
-
+                        $mmaModResource.logView(module.instance).then(function() {
+                            $mmCourse.checkModuleCompletion(courseid, module.completionstatus);
+                        });
                         if (downloadFailed && $mmApp.isOnline()) {
                             // We could load the main file but the download failed. Show error message.
                             $mmUtil.showErrorModal('mm.core.errordownloadingsomefiles', true);
                         }
+                    }).catch(function() {
+                        $mmUtil.showErrorModal('mma.mod_resource.errorwhileloadingthecontent', true);
+                    }).finally(function() {
+                        $scope.loaded = true;
+                        $scope.refreshIcon = 'ion-refresh';
                     });
                 });
-            } else if ($mmaModResource.isDisplayedEmbedded(module, mod.display)) {
-                $scope.mode = 'embedded';
-                return $mmaModResource.getEmbeddedHtml(module).then(function(html) {
-                    $scope.content = html;
-                });
             } else {
+                $scope.loaded = true;
+                $scope.refreshIcon = 'ion-refresh';
                 $scope.mode = 'external';
 
                 $scope.open = function() {
-                    $mmaModResourceHelper.openFile(module, courseId);
+                    var modal = $mmUtil.showModalLoading();
+
+                    $mmaModResource.openFile(module.contents, module.id).then(function() {
+                        $mmaModResource.logView(module.instance).then(function() {
+                            $mmCourse.checkModuleCompletion(courseid, module.completionstatus);
+                        });
+                    }).catch(function(error) {
+                        if (error && typeof error == 'string') {
+                            $mmUtil.showErrorModal(error);
+                        } else {
+                            $mmUtil.showErrorModal('mma.mod_resource.errorwhileloadingthecontent', true);
+                        }
+                    }).finally(function() {
+                        modal.dismiss();
+                    });
                 };
             }
-        }).then(function() {
-            // All data obtained, now fill the context menu.
-            $mmCourseHelper.fillContextMenu($scope, module, courseId, refresh, mmaModResourceComponent);
-        }).catch(function(error) {
-            $mmUtil.showErrorModalDefault(error, 'mma.mod_resource.errorwhileloadingthecontent', true);
-            return $q.reject();
-        }).finally(function() {
-            $scope.loaded = true;
-            $scope.refreshIcon = 'ion-refresh';
-        });
+        } else {
+            $mmUtil.showErrorModal('mma.mod_resource.errorwhileloadingthecontent', true);
+        }
     }
-
-    // Confirm and Remove action.
-    $scope.removeFiles = function() {
-        $mmCourseHelper.confirmAndRemove(module, courseId);
-    };
-
-    // Context Menu Prefetch action.
-    $scope.prefetch = function() {
-        $mmCourseHelper.contextMenuPrefetch($scope, module, courseId);
-    };
 
     // Context Menu Description action.
     $scope.expandDescription = function() {
-        $mmText.expandText($translate.instant('mm.core.description'), $scope.description, false,
-                    mmaModResourceComponent, module.id);
+        $mmText.expandText($translate.instant('mm.core.description'), $scope.description);
     };
 
     $scope.doRefresh = function() {
         if ($scope.loaded) {
             $scope.refreshIcon = 'spinner';
-            return $mmaModResource.invalidateContent(module.id, courseId).then(function() {
-                return fetchContent(true);
+            $mmaModResource.invalidateContent(module.id).then(function() {
+                return fetchContent();
             }).finally(function() {
-                $scope.refreshIcon = 'ion-refresh';
                 $scope.$broadcast('scroll.refreshComplete');
             });
         }
     };
 
-    fetchContent().then(function() {
-        $mmaModResource.logView(module.instance).then(function() {
-            $mmCourse.checkModuleCompletion(courseId, module.completionstatus);
-        });
-    });
+    fetchContent();
 });
