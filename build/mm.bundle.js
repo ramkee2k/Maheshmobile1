@@ -37529,7 +37529,7 @@ angular.module('mm.core')
     "wsservice" : "moodle_mobile_app",
     "wsextservice" : "local_mobile",
     "demo_sites": {},
-    "siteurl": "https://learn.moodle.net/",
+    "siteurl": "http://10.10.5.3/moodle-3.1/",
     "gcmpn": "learn-moodle-1159"
 }
 );
