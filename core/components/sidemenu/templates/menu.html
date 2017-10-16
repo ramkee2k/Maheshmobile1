@@ -36,12 +36,12 @@
                     <li class="item text-center" ng-if="(!handlers || !handlers.length) && !areNavHandlersLoaded()">
                         <ion-spinner></ion-spinner>
                     </li>
-                    <li ng-repeat="handler in handlers | orderBy:'-priority'" ng-controller="handler.controller" class="mm-sidemenu-handler {{class}}">
+                   <!-- Comments by 16-10-2017 <li ng-repeat="handler in handlers | orderBy:'-priority'" ng-controller="handler.controller" class="mm-sidemenu-handler {{class}}">
                         <a menu-close class="item item-icon-left" ui-sref="{{state}}" title="{{title | translate}}">
                             <i class="icon {{icon}}"></i> {{title | translate}}
                             <span ng-show="badge > 0" class="badge badge-positive">{{badge}}</span>
                         </a>
-                    </li>
+                    </li> -->
                     <li>
                         <a menu-close class="item item-icon-left" ng-href="{{siteinfo.siteurl}}" mm-link title="{{ 'mm.sidemenu.website' | translate}}">
                             <i class="icon ion-earth"></i>{{ 'mm.sidemenu.browserview' | translate}}
